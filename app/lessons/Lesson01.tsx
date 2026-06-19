@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
+import { CopyConfigBtn } from "./CopyConfigBtn";
 
 /**
  * Lesson 01 — Direct manipulation & 1:1 tracking
@@ -286,6 +287,11 @@ export function Lesson01() {
               {gain === 1 && latency === 0 ? "perfect 1:1" : "degraded"}
             </span>
           </div>
+        </div>
+
+        {/* Copy config */}
+        <div style={{ paddingTop: "var(--sp-2)" }}>
+          <CopyConfigBtn config={`gain=${gain}× latency=${latency}ms`} />
         </div>
       </div>
     </div>

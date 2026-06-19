@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { LESSONS } from "../lib/lessons";
 import { Lesson01 } from "./lessons/Lesson01";
 import { Lesson02 } from "./lessons/Lesson02";
@@ -12,6 +12,19 @@ import { Lesson07 } from "./lessons/Lesson07";
 import { Lesson08 } from "./lessons/Lesson08";
 
 const LS_KEY = "ip-last-lesson";
+
+// Hash scheme: #lesson-03
+function hashForLesson(id: number) {
+  return `#lesson-${String(id).padStart(2, "0")}`;
+}
+
+function lessonFromHash(hash: string): number | null {
+  const m = hash.match(/^#lesson-(\d+)$/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (n >= 1 && n <= 8) return n;
+  return null;
+}
 
 function getLessonComponent(id: number) {
   switch (id) {
@@ -27,30 +40,115 @@ function getLessonComponent(id: number) {
   }
 }
 
+function CopyButton({ text, label, children }: { text: string; label: string; children: React.ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleCopy() {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => setCopied(false), 1800);
+      });
+    }
+  }
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  return (
+    <button
+      onClick={handleCopy}
+      aria-label={label}
+      title={label}
+      style={{
+        background: "none",
+        border: "1px solid var(--grey-200)",
+        cursor: "pointer",
+        padding: "4px 10px",
+        fontSize: "var(--fs-micro)",
+        fontFamily: "var(--ds-font)",
+        fontWeight: 500,
+        letterSpacing: "0.14em",
+        textTransform: "uppercase",
+        color: copied ? "var(--ink)" : "var(--grey-600)",
+        whiteSpace: "nowrap",
+        transition: "color 0.15s",
+        minHeight: 32,
+        minWidth: 88,
+      }}
+    >
+      {copied ? "COPIED ✓" : children}
+    </button>
+  );
+}
+
 export default function AppShell() {
-  // SSR-safe: init to 1, read localStorage in effect
+  // SSR-safe: init to 1, read hash/localStorage in effect
   const [activeLesson, setActiveLesson] = useState(1);
   const [hz, setHz] = useState<60 | 120>(60);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Track current full URL for deep-link copying
+  const [currentUrl, setCurrentUrl] = useState("");
 
   useEffect(() => {
-    // Read from localStorage after hydration
-    const stored = window.localStorage.getItem(LS_KEY);
-    if (stored) {
-      const n = parseInt(stored, 10);
-      if (n >= 1 && n <= 8) setActiveLesson(n);
+    // Priority: hash > localStorage > default 1
+    const hashLesson = lessonFromHash(window.location.hash);
+    if (hashLesson !== null) {
+      setActiveLesson(hashLesson);
+    } else {
+      const stored = window.localStorage.getItem(LS_KEY);
+      if (stored) {
+        const n = parseInt(stored, 10);
+        if (n >= 1 && n <= 8) setActiveLesson(n);
+      }
     }
+    // Set initial URL
+    setCurrentUrl(window.location.href.split("#")[0] + hashForLesson(
+      lessonFromHash(window.location.hash) ??
+      (window.localStorage.getItem(LS_KEY) ? parseInt(window.localStorage.getItem(LS_KEY)!, 10) : 1)
+    ));
   }, []);
 
-  function goToLesson(id: number) {
+  // Listen for hashchange (e.g. browser back/forward)
+  useEffect(() => {
+    function onHashChange() {
+      const hashLesson = lessonFromHash(window.location.hash);
+      if (hashLesson !== null) {
+        setActiveLesson(hashLesson);
+      }
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // Update hash whenever activeLesson changes (after mount)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    if (!mounted) return;
+    const newHash = hashForLesson(activeLesson);
+    if (window.location.hash !== newHash) {
+      window.history.replaceState(null, "", newHash);
+    }
+    setCurrentUrl(window.location.href.split("#")[0] + newHash);
+  }, [activeLesson, mounted]);
+
+  const goToLesson = useCallback((id: number) => {
     setActiveLesson(id);
     setMenuOpen(false);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(LS_KEY, String(id));
     }
-  }
+  }, []);
 
   const lesson = LESSONS[activeLesson - 1];
+
+  // Build a "copy config" link for lessons with interesting param state (L01, L02, L06)
+  // We pass down a setter to collect the current params text from child lessons
+  // For simplicity, we just show the deep link for all lessons;
+  // and for L01/L02/L06 we additionally surface a text summary via a portal approach.
+  // Per spec: "copy a short text summary of the current parameters" is fine.
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", overflow: "hidden" }}>
@@ -81,14 +179,11 @@ export default function AppShell() {
             interactive lessons in how interfaces feel.
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-6)" }}>
-          <span className="ds-label ds-label--secondary" style={{ display: "none" }} aria-hidden>
-            08 LESSONS
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)" }}>
           <span className="ds-label ds-label--secondary" style={{ fontSize: "var(--fs-micro)" }}>
             08 LESSONS
           </span>
-          {/* Hz switch */}
+          {/* Hz switch with tooltip */}
           <button
             className="ds-seg__btn"
             style={{
@@ -102,9 +197,11 @@ export default function AppShell() {
               textTransform: "uppercase",
               cursor: "pointer",
               color: "var(--grey-600)",
+              minHeight: 32,
             }}
             onClick={() => setHz(hz === 60 ? 120 : 60)}
-            aria-label={`Switch to ${hz === 60 ? "120" : "60"}Hz target`}
+            aria-label={`Refresh-rate target: currently ${hz}Hz — click to switch to ${hz === 60 ? "120" : "60"}Hz`}
+            title={`Refresh-rate target (${hz}Hz). Click to toggle 60 ↔ 120Hz.`}
           >
             {hz}HZ
           </button>
@@ -116,14 +213,18 @@ export default function AppShell() {
               background: "none",
               border: "none",
               cursor: "pointer",
-              padding: 0,
+              padding: "4px 8px",
               fontSize: "var(--fs-label)",
               letterSpacing: "var(--ls-label)",
               textTransform: "uppercase",
               fontFamily: "var(--ds-font)",
               fontWeight: 500,
+              minHeight: 40,
+              minWidth: 72,
             }}
-            aria-label="Open lesson menu"
+            aria-label={menuOpen ? "Close lesson menu" : "Open lesson menu"}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-lesson-drawer"
             id="mobile-menu-btn"
             onClick={() => setMenuOpen(o => !o)}
           >
@@ -132,13 +233,13 @@ export default function AppShell() {
         </div>
         <style>{`
           @media (max-width: 768px) {
-            #mobile-menu-btn { display: inline-flex !important; }
+            #mobile-menu-btn { display: inline-flex !important; align-items: center; justify-content: center; }
           }
         `}</style>
       </header>
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
-        {/* LEFT RAIL */}
+        {/* LEFT RAIL (desktop) */}
         <nav
           aria-label="Lesson navigation"
           style={{
@@ -169,6 +270,7 @@ export default function AppShell() {
                   padding: "var(--sp-4) var(--sp-6)",
                   cursor: "pointer",
                   transition: "border-color var(--motion-fast)",
+                  minHeight: 56,
                 }}
                 aria-current={isActive ? "page" : undefined}
               >
@@ -210,9 +312,13 @@ export default function AppShell() {
           })}
         </nav>
 
-        {/* MOBILE OVERLAY MENU */}
+        {/* MOBILE LESSON DRAWER — slide-over, full-height */}
         {menuOpen && (
           <div
+            id="mobile-lesson-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Lesson menu"
             style={{
               position: "absolute",
               top: 0,
@@ -225,6 +331,11 @@ export default function AppShell() {
               padding: "var(--sp-6) 0",
             }}
           >
+            <div style={{ borderBottom: "1px solid var(--grey-200)", padding: "0 var(--sp-6) var(--sp-4)", marginBottom: "var(--sp-4)" }}>
+              <span style={{ fontSize: "var(--fs-micro)", fontWeight: 500, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--grey-600)" }}>
+                SELECT LESSON
+              </span>
+            </div>
             {LESSONS.map((l) => {
               const isActive = l.id === activeLesson;
               return (
@@ -240,9 +351,11 @@ export default function AppShell() {
                     background: "none",
                     border: "none",
                     borderLeft: isActive ? "2px solid var(--ink)" : "2px solid transparent",
-                    padding: "var(--sp-4) var(--sp-6)",
+                    padding: "var(--sp-5) var(--sp-6)",
                     cursor: "pointer",
+                    minHeight: 64,
                   }}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   <span style={{ fontSize: "var(--fs-micro)", fontWeight: 500, letterSpacing: "var(--ls-micro)", textTransform: "uppercase", color: "var(--grey-600)" }}>
                     {String(l.id).padStart(2, "0")}
@@ -269,13 +382,19 @@ export default function AppShell() {
           }}
           id="main-content"
         >
-          {/* Eyebrow */}
-          <span
-            className="ds-eyebrow"
-            style={{ marginBottom: "var(--sp-4)", display: "block" }}
-          >
-            {lesson.eyebrow}
-          </span>
+          {/* Eyebrow + copy actions row */}
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)", marginBottom: "var(--sp-4)", flexWrap: "wrap" }}>
+            <span className="ds-eyebrow" style={{ flex: 1, minWidth: 0 }}>
+              {lesson.eyebrow}
+            </span>
+            {/* Copy lesson link */}
+            <CopyButton
+              text={currentUrl}
+              label="Copy link to this lesson"
+            >
+              COPY LINK
+            </CopyButton>
+          </div>
 
           {/* Headline */}
           <h1
@@ -339,7 +458,8 @@ export default function AppShell() {
                   fontFamily: "var(--ds-font)",
                   fontWeight: 500,
                   color: "var(--ink)",
-                  padding: 0,
+                  padding: "8px 0",
+                  minHeight: 40,
                 }}
               >
                 ← LESSON {String(activeLesson - 1).padStart(2, "0")}
@@ -361,7 +481,8 @@ export default function AppShell() {
                   fontFamily: "var(--ds-font)",
                   fontWeight: 500,
                   color: "var(--ink)",
-                  padding: 0,
+                  padding: "8px 0",
+                  minHeight: 40,
                 }}
               >
                 LESSON {String(activeLesson + 1).padStart(2, "0")} →

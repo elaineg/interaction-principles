@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { recordFrame, budgetRatio, isFrameDropped, burnMs, makeFpsState, FpsState } from "../../lib/engine/fps";
+import { CopyConfigBtn } from "./CopyConfigBtn";
 
 /**
  * Lesson 06 — Latency, frame budget & jank
@@ -104,8 +105,9 @@ export function Lesson06() {
   }, []);
 
   const targetMs = 1000 / hz;
-  const ratio = budgetRatio(lastDeltaMs, hz);
-  const isOver = ratio > 1;
+  // Only show red / ratio when running — cold state shows 0 (neutral)
+  const ratio = running ? budgetRatio(lastDeltaMs, hz) : 0;
+  const isOver = running && ratio > 1;
 
   // Inline ball position for smooth DOM update
   const [ballX, setBallX] = useState(0);
@@ -152,7 +154,7 @@ export function Lesson06() {
         <div style={{ fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
           <span>FRAME BUDGET ({targetMs.toFixed(1)} ms target)</span>
           <span style={{ color: isOver ? "var(--red)" : "var(--ink)", fontVariantNumeric: "tabular-nums" }}>
-            {lastDeltaMs.toFixed(1)} ms {isOver ? "OVER" : ""}
+            {running ? `${lastDeltaMs.toFixed(1)} ms${isOver ? " OVER" : ""}` : "— ms"}
           </span>
         </div>
         <div style={{ height: 8, background: "var(--grey-100)", border: "1px solid var(--grey-200)", position: "relative" }}>
@@ -161,13 +163,18 @@ export function Lesson06() {
             left: 0,
             top: 0,
             bottom: 0,
-            width: `${Math.min(ratio * 100, 200)}%`,
+            width: running ? `${Math.min(ratio * 100, 200)}%` : "0%",
             background: isOver ? "var(--red)" : "var(--ink)",
             transition: "width 0.05s linear",
           }} />
           {/* Budget line at 100% */}
           <div style={{ position: "absolute", left: "100%", top: -2, bottom: -2, width: 1, background: "var(--ink)" }} />
         </div>
+        {!running && (
+          <div style={{ fontSize: "var(--fs-micro)", color: "var(--grey-400)", marginTop: 4 }}>
+            Press START to measure real frame deltas.
+          </div>
+        )}
       </div>
 
       {/* Timeline */}
@@ -194,14 +201,14 @@ export function Lesson06() {
         <div className="instrument">
           <span className="instrument__label">MEASURED FPS</span>
           <span className="instrument__value" style={{ color: fpsDisplay < hz * 0.9 && running ? "var(--red)" : "var(--ink)" }}
-            role="status" aria-live="polite" aria-label={`Measured FPS: ${fpsDisplay}`}>
-            {fpsDisplay}
+            role="status" aria-live="polite" aria-label={`Measured FPS: ${running ? fpsDisplay : "—"}`}>
+            {running ? fpsDisplay : "—"}
           </span>
         </div>
         <div className="instrument">
           <span className="instrument__label">LAST FRAME</span>
           <span className="instrument__value" style={{ color: isOver ? "var(--red)" : "var(--ink)" }}>
-            {lastDeltaMs.toFixed(1)} ms
+            {running ? `${lastDeltaMs.toFixed(1)} ms` : "—"}
           </span>
         </div>
         <div className="instrument">
@@ -210,8 +217,8 @@ export function Lesson06() {
         </div>
         <div className="instrument">
           <span className="instrument__label">DROPPED</span>
-          <span className="instrument__value" style={{ color: droppedCount > 0 ? "var(--red)" : "var(--ink)" }}>
-            {droppedCount}
+          <span className="instrument__value" style={{ color: droppedCount > 0 && running ? "var(--red)" : "var(--ink)" }}>
+            {running ? droppedCount : "—"}
           </span>
         </div>
       </div>
@@ -282,6 +289,11 @@ export function Lesson06() {
             Frame budget blown — {injectWork.toFixed(0)} ms work &gt; {targetMs.toFixed(1)} ms budget. Frames dropping.
           </p>
         )}
+
+        {/* Copy config */}
+        <div style={{ paddingTop: "var(--sp-2)" }}>
+          <CopyConfigBtn config={`target=${hz}Hz (${targetMs.toFixed(1)}ms budget) inject-work=${injectWork}ms`} />
+        </div>
       </div>
     </div>
   );

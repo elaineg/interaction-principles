@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { stepSpring, makeSpringState, SpringState, SpringParams } from "../../lib/engine/spring";
+import { CopyConfigBtn } from "./CopyConfigBtn";
 
 /**
  * Lesson 02 — Physics spring vs easing curve
@@ -57,6 +58,7 @@ export function Lesson02() {
   const [easingPos, setEasingPos] = useState(20); // x within right half
   const [running, setRunning] = useState(false);
   const [direction, setDirection] = useState<Direction>("right");
+  const [hasFired, setHasFired] = useState(false);
 
   // Plot data
   const [springPlot, setSpringPlot] = useState<number[]>([]);
@@ -78,6 +80,7 @@ export function Lesson02() {
   useEffect(() => { springParamsRef.current = springParams; }, [springParams]);
 
   const fire = useCallback(() => {
+    setHasFired(true);
     cancelAnimationFrame(rafRef.current);
     const newDir: Direction = dirRef.current === "right" ? "left" : "right";
     dirRef.current = newDir;
@@ -259,20 +262,28 @@ export function Lesson02() {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 4 }}>SPRING POSITION</div>
           <svg width={plotW} height={plotH} style={{ border: "1px solid var(--grey-200)", display: "block", width: "100%", maxWidth: plotW }}>
-            <path d={buildSparkline(springPlot, 20, TRAVEL, plotW, plotH)} stroke="var(--ink)" strokeWidth={1} fill="none" />
+            {!hasFired ? (
+              <text x={plotW / 2} y={plotH / 2 + 4} textAnchor="middle" fontSize={9} fill="var(--grey-400)" fontFamily="var(--ds-font)" letterSpacing="0.1em">PRESS FIRE</text>
+            ) : (
+              <path d={buildSparkline(springPlot, 20, TRAVEL, plotW, plotH)} stroke="var(--ink)" strokeWidth={1} fill="none" />
+            )}
           </svg>
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 4 }}>EASING POSITION</div>
           <svg width={plotW} height={plotH} style={{ border: "1px solid var(--grey-200)", display: "block", width: "100%", maxWidth: plotW }}>
-            <path d={buildSparkline(easingPlot, 20, TRAVEL, plotW, plotH)} stroke="var(--ink)" strokeWidth={1} fill="none" />
+            {!hasFired ? (
+              <text x={plotW / 2} y={plotH / 2 + 4} textAnchor="middle" fontSize={9} fill="var(--grey-400)" fontFamily="var(--ds-font)" letterSpacing="0.1em">PRESS FIRE</text>
+            ) : (
+              <path d={buildSparkline(easingPlot, 20, TRAVEL, plotW, plotH)} stroke="var(--ink)" strokeWidth={1} fill="none" />
+            )}
           </svg>
         </div>
       </div>
 
       {/* CONTROLS */}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-6)", borderTop: "1px solid var(--grey-200)", paddingTop: "var(--sp-6)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-8)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-8)", minWidth: 0 }}>
           {/* Spring params */}
           <div>
             <div style={{ fontSize: "var(--fs-label)", fontWeight: 500, letterSpacing: "var(--ls-label)", textTransform: "uppercase", color: "var(--grey-600)", marginBottom: "var(--sp-4)" }}>SPRING PARAMS</div>
@@ -353,6 +364,11 @@ export function Lesson02() {
               cubic-bezier({bezierP1.x.toFixed(2)}, {bezierP1.y.toFixed(2)}, {bezierP2.x.toFixed(2)}, {bezierP2.y.toFixed(2)})
             </div>
           </div>
+        </div>
+
+        {/* Copy config */}
+        <div style={{ paddingTop: "var(--sp-2)" }}>
+          <CopyConfigBtn config={`spring: mass=${springParams.mass} stiffness=${springParams.stiffness} damping=${springParams.damping} | easing: duration=${duration}ms cubic-bezier(${bezierP1.x.toFixed(2)},${bezierP1.y.toFixed(2)},${bezierP2.x.toFixed(2)},${bezierP2.y.toFixed(2)})`} />
         </div>
       </div>
     </div>
