@@ -8,12 +8,23 @@ import type { ParamRecord } from "../../lib/lessonParams";
 
 /**
  * Lesson 05 — Velocity handoff / flick
- * Flick a card, capture lift-off velocity, decelerate with rubber-band at edges.
+ * Flick a card, capture lift-off velocity, decelerate with elastic bounce at edges.
  * SEAM debug toggle shows the bad version (ignores lift-off velocity).
+ *
+ * Ground-up overhaul (2026-06-20):
+ * - All drag/inertia state lives in refs; no stale closures on isDragging
+ * - frictionRef is read LIVE on every decel tick — slider changes felt immediately
+ * - dt clamped at tick level (≤32ms per frame) and inside stepDecelIntegrate
+ * - High-speed tunneling handled by sub-stepping within each frame
+ * - Elastic bounce: clamp + reflect velocity × restitution at every bound crossing
+ * - One pointer of truth: setPointerCapture on pointerdown, release on up/cancel
+ * - Grabbing mid-glide re-captures: cancels rAF, resets sampler, seamless hand-back
  */
 
 const CARD_W = 80;
 const CARD_H = 56;
+const RESTITUTION = 0.6;   // <1 so bounces decay
+const REST_THRESHOLD = 0.5; // px/s — snap velocity to 0 below this
 
 interface Props {
   initialParams?: ParamRecord;
@@ -24,14 +35,15 @@ export function Lesson05({ initialParams = {}, onParamsChange }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [cardX, setCardX] = useState(0);
   const [cardY, setCardY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
   const [decelFriction, setDecelFriction] = useState((initialParams.fric as number) ?? 4);
   const [rubberBandOn, setRubberBandOn] = useState((initialParams.rubber as number) !== 0);
   const [seamDebug, setSeamDebug] = useState((initialParams.seam as number) === 1);
   const [liftoffVelocity, setLiftoffVelocity] = useState<{ vx: number; vy: number } | null>(null);
   const [showSeamMarker, setShowSeamMarker] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
+  // All mutable physics state lives in refs so tick closures always see fresh values
   const samplesRef = useRef<PointerSample[]>([]);
   const rafRef = useRef<number>(0);
   const decelStateRef = useRef<DecelState>({ position: 0, velocity: 0 });
@@ -40,14 +52,18 @@ export function Lesson05({ initialParams = {}, onParamsChange }: Props) {
   const cardYRef = useRef(0);
   const stageWRef = useRef(300);
   const stageHRef = useRef(200);
+
+  // Live refs for slider/toggle values — read inside rAF tick, never a stale closure
   const frictionRef = useRef(decelFriction);
   const rubberBandRef = useRef(rubberBandOn);
   const seamRef = useRef(seamDebug);
+  const isDraggingRef = useRef(false); // mirrors isDragging for pointer handler guards
 
   useEffect(() => { frictionRef.current = decelFriction; }, [decelFriction]);
   useEffect(() => { rubberBandRef.current = rubberBandOn; }, [rubberBandOn]);
   useEffect(() => { seamRef.current = seamDebug; }, [seamDebug]);
 
+  // Stage size observer
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
@@ -71,38 +87,172 @@ export function Lesson05({ initialParams = {}, onParamsChange }: Props) {
     return () => ro.disconnect();
   }, []);
 
+  // Cancel any running rAF on unmount
+  useEffect(() => {
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  // ─── INERTIA LOOP ──────────────────────────────────────────────────────────
+  // Extracted so it can be started from onPointerUp.
+  // All values read from refs — no closure captures.
+  const startInertia = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+
+    let lastTime = performance.now();
+
+    function tick(now: number) {
+      // Guard: if user grabbed mid-glide, isDraggingRef is true → stop loop
+      if (isDraggingRef.current) return;
+
+      // Clamp dt to ≤32ms (prevents tunneling on tab-switch / long frames)
+      // stepDecelIntegrate also caps at 64ms internally, but 32ms here reduces sub-step load
+      const rawDt = (now - lastTime) / 1000;
+      lastTime = now;
+      const frameDt = Math.min(rawDt, 0.032);
+
+      // Read friction LIVE from ref — slider changes are felt immediately
+      const friction = frictionRef.current;
+      const useRubber = rubberBandRef.current;
+
+      // Sub-step within the frame to handle high-speed tunneling.
+      // Each sub-step is at most 8ms so a fast flick can't skip past a wall.
+      const SUB_STEP = 0.008; // 8ms
+      let remaining = frameDt;
+
+      while (remaining > 0) {
+        const dt = Math.min(remaining, SUB_STEP);
+        remaining -= dt;
+
+        decelStateRef.current = stepDecelIntegrate(decelStateRef.current, friction, dt);
+        decelStateYRef.current = stepDecelIntegrate(decelStateYRef.current, friction, dt);
+
+        let nx = decelStateRef.current.position;
+        let ny = decelStateYRef.current.position;
+
+        const maxX = stageWRef.current - CARD_W;
+        const maxY = stageHRef.current - CARD_H;
+
+        // Elastic reflection: baseline — no setting can let the card escape
+        if (nx < 0) {
+          nx = 0;
+          decelStateRef.current.velocity = Math.abs(decelStateRef.current.velocity) * RESTITUTION;
+        }
+        if (nx > maxX) {
+          nx = maxX;
+          decelStateRef.current.velocity = -Math.abs(decelStateRef.current.velocity) * RESTITUTION;
+        }
+        if (ny < 0) {
+          ny = 0;
+          decelStateYRef.current.velocity = Math.abs(decelStateYRef.current.velocity) * RESTITUTION;
+        }
+        if (ny > maxY) {
+          ny = maxY;
+          decelStateYRef.current.velocity = -Math.abs(decelStateYRef.current.velocity) * RESTITUTION;
+        }
+
+        // Rubber-band: softness modifier only, applied after bounce clamp
+        if (useRubber) {
+          const TENSION = 0.15;
+          if (nx < 16) nx = nx + (16 - nx) * TENSION;
+          if (nx > maxX - 16) nx = nx - (nx - (maxX - 16)) * TENSION;
+          if (ny < 16) ny = ny + (16 - ny) * TENSION;
+          if (ny > maxY - 16) ny = ny - (ny - (maxY - 16)) * TENSION;
+        }
+
+        // Hard clamp — guarantee in-bounds after any modifier
+        nx = Math.max(0, Math.min(maxX, nx));
+        ny = Math.max(0, Math.min(maxY, ny));
+
+        // Guard against NaN (should never happen given safe math, but belt-and-suspenders)
+        if (!Number.isFinite(nx)) nx = Math.max(0, Math.min(maxX, cardXRef.current));
+        if (!Number.isFinite(ny)) ny = Math.max(0, Math.min(maxY, cardYRef.current));
+
+        decelStateRef.current.position = nx;
+        decelStateYRef.current.position = ny;
+        cardXRef.current = nx;
+        cardYRef.current = ny;
+
+        // Snap velocity to 0 below epsilon to avoid indefinite micro-jitter
+        if (Math.abs(decelStateRef.current.velocity) < REST_THRESHOLD) {
+          decelStateRef.current.velocity = 0;
+        }
+        if (Math.abs(decelStateYRef.current.velocity) < REST_THRESHOLD) {
+          decelStateYRef.current.velocity = 0;
+        }
+      }
+
+      setCardX(cardXRef.current);
+      setCardY(cardYRef.current);
+
+      const doneX = decelStateRef.current.velocity === 0 || isDecelDone(decelStateRef.current);
+      const doneY = decelStateYRef.current.velocity === 0 || isDecelDone(decelStateYRef.current);
+
+      if (!doneX || !doneY) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  // ─── POINTER HANDLERS ─────────────────────────────────────────────────────
+
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
+    e.stopPropagation();
+
+    // Cancel any inertia loop — grabbing mid-glide re-captures cleanly
     cancelAnimationFrame(rafRef.current);
+
+    // Reset velocity sampler
     samplesRef.current = [];
     setLiftoffVelocity(null);
     setShowSeamMarker(false);
+    isDraggingRef.current = true;
     setIsDragging(true);
 
     const rect = stageRef.current!.getBoundingClientRect();
     const sx = e.clientX - rect.left - CARD_W / 2;
     const sy = e.clientY - rect.top - CARD_H / 2;
     samplesRef.current = addSample([], sx, sy, e.timeStamp);
-    cardXRef.current = sx;
-    cardYRef.current = sy;
-    setCardX(sx);
-    setCardY(sy);
+
+    // Snap card to pointer immediately (no jump)
+    const maxX = stageWRef.current - CARD_W;
+    const maxY = stageHRef.current - CARD_H;
+    const cx = Math.max(0, Math.min(maxX, sx));
+    const cy = Math.max(0, Math.min(maxY, sy));
+    cardXRef.current = cx;
+    cardYRef.current = cy;
+    setCardX(cx);
+    setCardY(cy);
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isDragging) return;
+    // Use ref for dragging check — no stale closure
+    if (!isDraggingRef.current) return;
+    e.stopPropagation();
+
     const rect = stageRef.current!.getBoundingClientRect();
     const sx = e.clientX - rect.left - CARD_W / 2;
     const sy = e.clientY - rect.top - CARD_H / 2;
     samplesRef.current = addSample(samplesRef.current, sx, sy, e.timeStamp);
-    cardXRef.current = sx;
-    cardYRef.current = sy;
-    setCardX(sx);
-    setCardY(sy);
-  }, [isDragging]);
+
+    // Clamp to stage during drag too (never escape while dragging)
+    const maxX = stageWRef.current - CARD_W;
+    const maxY = stageHRef.current - CARD_H;
+    const cx = Math.max(0, Math.min(maxX, sx));
+    const cy = Math.max(0, Math.min(maxY, sy));
+    cardXRef.current = cx;
+    cardYRef.current = cy;
+    setCardX(cx);
+    setCardY(cy);
+  }, []);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
-    if (!isDragging) return;
+    if (!isDraggingRef.current) return;
+    e.stopPropagation();
+
+    isDraggingRef.current = false;
     setIsDragging(false);
 
     const { vx, vy } = estimateVelocity(samplesRef.current); // px/ms
@@ -111,7 +261,7 @@ export function Lesson05({ initialParams = {}, onParamsChange }: Props) {
     const vyps = vy * 1000;
 
     if (seamRef.current) {
-      // Seam version: ignore velocity, start from zero
+      // Seam version: ignores velocity, starts from zero → feel the jerk
       setLiftoffVelocity({ vx: 0, vy: 0 });
       setShowSeamMarker(true);
       decelStateRef.current = { position: cardXRef.current, velocity: 0 };
@@ -122,82 +272,10 @@ export function Lesson05({ initialParams = {}, onParamsChange }: Props) {
       decelStateYRef.current = { position: cardYRef.current, velocity: vyps };
     }
 
-    // P0 fix: elastic velocity reflection at bounds so card NEVER escapes
-    // restitution < 1 so bounces decay; rubber-band is a softness modifier only
-    const RESTITUTION = 0.6;
+    startInertia();
+  }, [startInertia]);
 
-    let lastTime = performance.now();
-
-    function tick(now: number) {
-      const dt = (now - lastTime) / 1000;
-      lastTime = now;
-      // Read friction from ref EVERY frame — no stale closure; slider changes felt immediately
-      const friction = frictionRef.current;
-      const useRubber = rubberBandRef.current;
-
-      decelStateRef.current = stepDecelIntegrate(decelStateRef.current, friction, dt);
-      decelStateYRef.current = stepDecelIntegrate(decelStateYRef.current, friction, dt);
-
-      let nx = decelStateRef.current.position;
-      let ny = decelStateYRef.current.position;
-
-      const maxX = stageWRef.current - CARD_W;
-      const maxY = stageHRef.current - CARD_H;
-
-      // Elastic reflection: clamp + flip velocity at every bound crossing
-      // This is the BASELINE — no setting can let the card escape the stage
-      if (nx < 0) {
-        nx = 0;
-        decelStateRef.current.velocity = Math.abs(decelStateRef.current.velocity) * RESTITUTION;
-      }
-      if (nx > maxX) {
-        nx = maxX;
-        decelStateRef.current.velocity = -Math.abs(decelStateRef.current.velocity) * RESTITUTION;
-      }
-      if (ny < 0) {
-        ny = 0;
-        decelStateYRef.current.velocity = Math.abs(decelStateYRef.current.velocity) * RESTITUTION;
-      }
-      if (ny > maxY) {
-        ny = maxY;
-        decelStateYRef.current.velocity = -Math.abs(decelStateYRef.current.velocity) * RESTITUTION;
-      }
-
-      // Rubber-band is a SOFTNESS MODIFIER on top of the already-bounced position
-      // It only applies inside the clamped range, so it cannot push the card out
-      if (useRubber) {
-        // Soft pull back toward bounds when near edge (cosmetic softness only)
-        const TENSION = 0.15;
-        if (nx < 16) nx = nx + (16 - nx) * TENSION;
-        if (nx > maxX - 16) nx = nx - (nx - (maxX - 16)) * TENSION;
-        if (ny < 16) ny = ny + (16 - ny) * TENSION;
-        if (ny > maxY - 16) ny = ny - (ny - (maxY - 16)) * TENSION;
-      }
-
-      // Final hard clamp — guarantees in-bounds regardless of rubber-band
-      nx = Math.max(0, Math.min(maxX, nx));
-      ny = Math.max(0, Math.min(maxY, ny));
-
-      decelStateRef.current.position = nx;
-      decelStateYRef.current.position = ny;
-      cardXRef.current = nx;
-      cardYRef.current = ny;
-      setCardX(nx);
-      setCardY(ny);
-
-      const doneX = isDecelDone(decelStateRef.current);
-      const doneY = isDecelDone(decelStateYRef.current);
-
-      if (!doneX || !doneY) {
-        rafRef.current = requestAnimationFrame(tick);
-      }
-    }
-    rafRef.current = requestAnimationFrame(tick);
-  }, [isDragging]);
-
-  useEffect(() => {
-    return () => cancelAnimationFrame(rafRef.current);
-  }, []);
+  // ─── DISPLAY ──────────────────────────────────────────────────────────────
 
   const velMag = liftoffVelocity
     ? Math.round(Math.sqrt(liftoffVelocity.vx ** 2 + liftoffVelocity.vy ** 2))
