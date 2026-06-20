@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { stepSpring, makeSpringState, isAtRest, SpringState } from "../../lib/engine/spring";
+import type { ParamRecord } from "../../lib/lessonParams";
 
 /**
  * Lesson 08 — Spatial / navigational continuity
@@ -30,9 +31,14 @@ interface TileRect {
   height: number;
 }
 
-export function Lesson08() {
-  const [continuity, setContinuity] = useState(true);
-  const [slowMo, setSlowMo] = useState(false);
+interface Props {
+  initialParams?: ParamRecord;
+  onParamsChange?: (key: string, val: string | number | boolean) => void;
+}
+
+export function Lesson08({ initialParams = {}, onParamsChange }: Props) {
+  const [continuity, setContinuity] = useState((initialParams.cont as number) !== 0);
+  const [slowMo, setSlowMo] = useState((initialParams.slowmo as number) === 1);
   const [selected, setSelected] = useState<number | null>(null);
   const [animating, setAnimating] = useState(false);
 
@@ -48,8 +54,8 @@ export function Lesson08() {
   const rafRef = useRef<number>(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const slowMoRef = useRef(false);
-  const continuityRef = useRef(true);
+  const slowMoRef = useRef(slowMo);
+  const continuityRef = useRef(continuity);
 
   useEffect(() => { slowMoRef.current = slowMo; }, [slowMo]);
   useEffect(() => { continuityRef.current = continuity; }, [continuity]);
@@ -211,6 +217,18 @@ export function Lesson08() {
     return () => cancelAnimationFrame(rafRef.current);
   }, []);
 
+  function handleContinuityChange(checked: boolean) {
+    setContinuity(checked);
+    setSelected(null);
+    setOverlay(null);
+    onParamsChange?.("cont", checked ? 1 : 0);
+  }
+
+  function handleSlowMoChange(checked: boolean) {
+    setSlowMo(checked);
+    onParamsChange?.("slowmo", checked ? 1 : 0);
+  }
+
   return (
     <div>
       {/* DEMO STAGE */}
@@ -350,7 +368,7 @@ export function Lesson08() {
               type="checkbox"
               id="continuity-toggle"
               checked={continuity}
-              onChange={e => { setContinuity(e.target.checked); setSelected(null); setOverlay(null); }}
+              onChange={e => handleContinuityChange(e.target.checked)}
               aria-label="Continuity toggle"
             />
             <span style={{ fontSize: "var(--fs-label)", fontWeight: 500, letterSpacing: "var(--ls-label)", textTransform: "uppercase", color: continuity ? "var(--ink)" : "var(--red)" }}>
@@ -363,7 +381,7 @@ export function Lesson08() {
               type="checkbox"
               id="slowmo-toggle"
               checked={slowMo}
-              onChange={e => setSlowMo(e.target.checked)}
+              onChange={e => handleSlowMoChange(e.target.checked)}
               aria-label="Slow motion toggle"
             />
             <span style={{ fontSize: "var(--fs-label)", fontWeight: 500, letterSpacing: "var(--ls-label)", textTransform: "uppercase", color: "var(--grey-600)" }}>

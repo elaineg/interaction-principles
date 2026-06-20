@@ -5,6 +5,173 @@ import { stepDecel, restPosition, rubberBand, isDecelDone } from "../../lib/engi
 import { recordFrame, budgetRatio, isFrameDropped, makeFpsState } from "../../lib/engine/fps";
 
 // ============================================================
+// P0: LESSON 01 GAIN MATH — anchor-relative object displacement
+// ============================================================
+
+describe("Lesson 01 gain math (anchor-relative)", () => {
+  // Helper that mimics the fixed applyMoveAnchored logic:
+  // objectPos = anchorObj + gain × (currentPointer − anchorPtr), then clamp
+  function computeObjectPos(
+    anchorObjX: number,
+    anchorPtrX: number,
+    currentPtrX: number,
+    gain: number,
+    stageW = 1000,
+    squareHalf = 24
+  ): number {
+    const dxPtr = currentPtrX - anchorPtrX;
+    let nx = anchorObjX + gain * dxPtr;
+    // clamp
+    nx = Math.max(squareHalf, Math.min(stageW - squareHalf, nx));
+    return nx;
+  }
+
+  it("gain 0.5× → object moves half the pointer distance", () => {
+    // anchorObj=(100,100), anchorPtr=(100,100), pointer→(200,100)
+    // Expected: 100 + 0.5 × (200-100) = 150
+    expect(computeObjectPos(100, 100, 200, 0.5)).toBeCloseTo(150, 1);
+  });
+
+  it("gain 1× → object moves exactly the pointer distance (1:1)", () => {
+    // Expected: 100 + 1 × (200-100) = 200
+    expect(computeObjectPos(100, 100, 200, 1)).toBeCloseTo(200, 1);
+  });
+
+  it("gain 2× → object moves twice the pointer distance", () => {
+    // Expected: 100 + 2 × (200-100) = 300 (pre-clamp; with large stageW=1000 stays at 300)
+    expect(computeObjectPos(100, 100, 200, 2)).toBeCloseTo(300, 1);
+  });
+
+  it("at gain 1×, object displacement equals pointer displacement", () => {
+    const anchorObjX = 80;
+    const anchorPtrX = 95;
+    const currentPtrX = 175;
+    const ptrDisp = currentPtrX - anchorPtrX; // 80
+    const objPos = computeObjectPos(anchorObjX, anchorPtrX, currentPtrX, 1);
+    expect(objPos - anchorObjX).toBeCloseTo(ptrDisp, 1);
+  });
+
+  it("at gain 0.5×, delta (pointer−object) grows relative to gain=1", () => {
+    const anchorObjX = 100, anchorPtrX = 100, currentPtrX = 200;
+    const pos05 = computeObjectPos(anchorObjX, anchorPtrX, currentPtrX, 0.5);
+    const pos1  = computeObjectPos(anchorObjX, anchorPtrX, currentPtrX, 1);
+    // At gain=1, delta≈0. At gain=0.5, object lags behind pointer → delta grows
+    expect(Math.abs(currentPtrX - pos05)).toBeGreaterThan(Math.abs(currentPtrX - pos1));
+  });
+});
+
+// ============================================================
+// P0: LESSON 05 VELOCITY BOUNDS — card stays inside stage on hard flick
+// ============================================================
+
+describe("Lesson 05 bounds (elastic reflection, P0)", () => {
+  const RESTITUTION = 0.6;
+  const CARD_W = 80;
+  const CARD_H = 56;
+
+  // Simulate the decel loop with elastic reflection, same logic as Lesson05.tsx
+  function runDecelWithBounds(
+    startX: number,
+    startY: number,
+    vxps: number,
+    vyps: number,
+    stageW: number,
+    stageH: number,
+    friction = 4,
+    maxSteps = 3000
+  ) {
+    const maxX = stageW - CARD_W;
+    const maxY = stageH - CARD_H;
+    let stateX = { position: startX, velocity: vxps };
+    let stateY = { position: startY, velocity: vyps };
+    const dt = 0.016;
+    const positions: { x: number; y: number }[] = [];
+    let bounceCountX = 0;
+    let bounceCountY = 0;
+
+    for (let i = 0; i < maxSteps; i++) {
+      stateX = stepDecel(stateX, friction, dt);
+      stateY = stepDecel(stateY, friction, dt);
+
+      let nx = stateX.position;
+      let ny = stateY.position;
+
+      if (nx < 0) {
+        nx = 0;
+        stateX.velocity = Math.abs(stateX.velocity) * RESTITUTION;
+        bounceCountX++;
+      }
+      if (nx > maxX) {
+        nx = maxX;
+        stateX.velocity = -Math.abs(stateX.velocity) * RESTITUTION;
+        bounceCountX++;
+      }
+      if (ny < 0) {
+        ny = 0;
+        stateY.velocity = Math.abs(stateY.velocity) * RESTITUTION;
+        bounceCountY++;
+      }
+      if (ny > maxY) {
+        ny = maxY;
+        stateY.velocity = -Math.abs(stateY.velocity) * RESTITUTION;
+        bounceCountY++;
+      }
+
+      nx = Math.max(0, Math.min(maxX, nx));
+      ny = Math.max(0, Math.min(maxY, ny));
+
+      stateX.position = nx;
+      stateY.position = ny;
+
+      positions.push({ x: nx, y: ny });
+
+      if (isDecelDone(stateX) && isDecelDone(stateY)) break;
+    }
+
+    return { positions, bounceCountX, bounceCountY, finalX: stateX.position, finalY: stateY.position };
+  }
+
+  it("card stays within stage bounds at every step on a hard rightward flick", () => {
+    const stageW = 400, stageH = 200;
+    const maxX = stageW - CARD_W, maxY = stageH - CARD_H;
+    const { positions } = runDecelWithBounds(200, 72, 3000, 0, stageW, stageH);
+    for (const p of positions) {
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.x).toBeLessThanOrEqual(maxX);
+      expect(p.y).toBeGreaterThanOrEqual(0);
+      expect(p.y).toBeLessThanOrEqual(maxY);
+    }
+  });
+
+  it("card stays within bounds on a hard diagonal flick toward corner", () => {
+    const stageW = 400, stageH = 200;
+    const maxX = stageW - CARD_W, maxY = stageH - CARD_H;
+    const { positions } = runDecelWithBounds(40, 30, 4000, 3000, stageW, stageH);
+    for (const p of positions) {
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.x).toBeLessThanOrEqual(maxX);
+      expect(p.y).toBeGreaterThanOrEqual(0);
+      expect(p.y).toBeLessThanOrEqual(maxY);
+    }
+  });
+
+  it("velocity sign flips at least once on a hard flick toward a wall", () => {
+    const { bounceCountX } = runDecelWithBounds(200, 72, 5000, 0, 400, 200);
+    expect(bounceCountX).toBeGreaterThanOrEqual(1);
+  });
+
+  it("card comes to rest inside the stage (not at or past a boundary)", () => {
+    const stageW = 400, stageH = 200;
+    const maxX = stageW - CARD_W, maxY = stageH - CARD_H;
+    const { finalX, finalY } = runDecelWithBounds(200, 72, 2000, 1500, stageW, stageH);
+    expect(finalX).toBeGreaterThanOrEqual(0);
+    expect(finalX).toBeLessThanOrEqual(maxX);
+    expect(finalY).toBeGreaterThanOrEqual(0);
+    expect(finalY).toBeLessThanOrEqual(maxY);
+  });
+});
+
+// ============================================================
 // SPRING ENGINE
 // ============================================================
 

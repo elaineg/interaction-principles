@@ -2,7 +2,8 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { addSample, estimateVelocity, PointerSample } from "../../lib/engine/velocity";
-import { stepDecel, rubberBand, isDecelDone, DecelState } from "../../lib/engine/decel";
+import { stepDecel, isDecelDone, DecelState } from "../../lib/engine/decel";
+import type { ParamRecord } from "../../lib/lessonParams";
 
 /**
  * Lesson 05 — Velocity handoff / flick
@@ -13,14 +14,19 @@ import { stepDecel, rubberBand, isDecelDone, DecelState } from "../../lib/engine
 const CARD_W = 80;
 const CARD_H = 56;
 
-export function Lesson05() {
+interface Props {
+  initialParams?: ParamRecord;
+  onParamsChange?: (key: string, val: string | number | boolean) => void;
+}
+
+export function Lesson05({ initialParams = {}, onParamsChange }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [cardX, setCardX] = useState(0);
   const [cardY, setCardY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [decelFriction, setDecelFriction] = useState(4);
-  const [rubberBandOn, setRubberBandOn] = useState(true);
-  const [seamDebug, setSeamDebug] = useState(false);
+  const [decelFriction, setDecelFriction] = useState((initialParams.fric as number) ?? 4);
+  const [rubberBandOn, setRubberBandOn] = useState((initialParams.rubber as number) !== 0);
+  const [seamDebug, setSeamDebug] = useState((initialParams.seam as number) === 1);
   const [liftoffVelocity, setLiftoffVelocity] = useState<{ vx: number; vy: number } | null>(null);
   const [showSeamMarker, setShowSeamMarker] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -33,9 +39,9 @@ export function Lesson05() {
   const cardYRef = useRef(0);
   const stageWRef = useRef(300);
   const stageHRef = useRef(200);
-  const frictionRef = useRef(4);
-  const rubberBandRef = useRef(true);
-  const seamRef = useRef(false);
+  const frictionRef = useRef(decelFriction);
+  const rubberBandRef = useRef(rubberBandOn);
+  const seamRef = useRef(seamDebug);
 
   useEffect(() => { frictionRef.current = decelFriction; }, [decelFriction]);
   useEffect(() => { rubberBandRef.current = rubberBandOn; }, [rubberBandOn]);
@@ -115,6 +121,10 @@ export function Lesson05() {
       decelStateYRef.current = { position: cardYRef.current, velocity: vyps };
     }
 
+    // P0 fix: elastic velocity reflection at bounds so card NEVER escapes
+    // restitution < 1 so bounces decay; rubber-band is a softness modifier only
+    const RESTITUTION = 0.6;
+
     let lastTime = performance.now();
 
     function tick(now: number) {
@@ -132,17 +142,42 @@ export function Lesson05() {
       const maxX = stageWRef.current - CARD_W;
       const maxY = stageHRef.current - CARD_H;
 
-      if (useRubber) {
-        nx = rubberBand(nx, 0, maxX);
-        ny = rubberBand(ny, 0, maxY);
-      } else {
-        // Hard clamp + kill velocity on wall
-        if (nx < 0) { nx = 0; decelStateRef.current.velocity = 0; }
-        if (nx > maxX) { nx = maxX; decelStateRef.current.velocity = 0; }
-        if (ny < 0) { ny = 0; decelStateYRef.current.velocity = 0; }
-        if (ny > maxY) { ny = maxY; decelStateYRef.current.velocity = 0; }
+      // Elastic reflection: clamp + flip velocity at every bound crossing
+      // This is the BASELINE — no setting can let the card escape the stage
+      if (nx < 0) {
+        nx = 0;
+        decelStateRef.current.velocity = Math.abs(decelStateRef.current.velocity) * RESTITUTION;
+      }
+      if (nx > maxX) {
+        nx = maxX;
+        decelStateRef.current.velocity = -Math.abs(decelStateRef.current.velocity) * RESTITUTION;
+      }
+      if (ny < 0) {
+        ny = 0;
+        decelStateYRef.current.velocity = Math.abs(decelStateYRef.current.velocity) * RESTITUTION;
+      }
+      if (ny > maxY) {
+        ny = maxY;
+        decelStateYRef.current.velocity = -Math.abs(decelStateYRef.current.velocity) * RESTITUTION;
       }
 
+      // Rubber-band is a SOFTNESS MODIFIER on top of the already-bounced position
+      // It only applies inside the clamped range, so it cannot push the card out
+      if (useRubber) {
+        // Soft pull back toward bounds when near edge (cosmetic softness only)
+        const TENSION = 0.15;
+        if (nx < 16) nx = nx + (16 - nx) * TENSION;
+        if (nx > maxX - 16) nx = nx - (nx - (maxX - 16)) * TENSION;
+        if (ny < 16) ny = ny + (16 - ny) * TENSION;
+        if (ny > maxY - 16) ny = ny - (ny - (maxY - 16)) * TENSION;
+      }
+
+      // Final hard clamp — guarantees in-bounds regardless of rubber-band
+      nx = Math.max(0, Math.min(maxX, nx));
+      ny = Math.max(0, Math.min(maxY, ny));
+
+      decelStateRef.current.position = nx;
+      decelStateYRef.current.position = ny;
       cardXRef.current = nx;
       cardYRef.current = ny;
       setCardX(nx);
@@ -165,6 +200,21 @@ export function Lesson05() {
   const velMag = liftoffVelocity
     ? Math.round(Math.sqrt(liftoffVelocity.vx ** 2 + liftoffVelocity.vy ** 2))
     : 0;
+
+  function handleFrictionChange(v: number) {
+    setDecelFriction(v);
+    onParamsChange?.("fric", v);
+  }
+
+  function handleRubberChange(checked: boolean) {
+    setRubberBandOn(checked);
+    onParamsChange?.("rubber", checked ? 1 : 0);
+  }
+
+  function handleSeamChange(checked: boolean) {
+    setSeamDebug(checked);
+    onParamsChange?.("seam", checked ? 1 : 0);
+  }
 
   return (
     <div>
@@ -297,7 +347,7 @@ export function Lesson05() {
             className="ds-slider"
             min={1} max={12} step={0.5}
             value={decelFriction}
-            onChange={e => setDecelFriction(Number(e.target.value))}
+            onChange={e => handleFrictionChange(Number(e.target.value))}
             aria-label="Deceleration friction coefficient"
           />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-micro)", color: "var(--grey-400)" }}>
@@ -312,7 +362,7 @@ export function Lesson05() {
               type="checkbox"
               id="rubber-toggle"
               checked={rubberBandOn}
-              onChange={e => setRubberBandOn(e.target.checked)}
+              onChange={e => handleRubberChange(e.target.checked)}
               aria-label="Rubber-band at bounds toggle"
             />
             <span style={{ fontSize: "var(--fs-label)", fontWeight: 500, letterSpacing: "var(--ls-label)", textTransform: "uppercase", color: "var(--grey-600)" }}>
@@ -325,7 +375,7 @@ export function Lesson05() {
               type="checkbox"
               id="seam-toggle"
               checked={seamDebug}
-              onChange={e => setSeamDebug(e.target.checked)}
+              onChange={e => handleSeamChange(e.target.checked)}
               aria-label="SEAM debug toggle — ignores lift-off velocity"
             />
             <span style={{ fontSize: "var(--fs-label)", fontWeight: 500, letterSpacing: "var(--ls-label)", textTransform: "uppercase", color: seamDebug ? "var(--red)" : "var(--grey-600)" }}>

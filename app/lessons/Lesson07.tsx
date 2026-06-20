@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import type { ParamRecord } from "../../lib/lessonParams";
 
 /**
  * Lesson 07 — Feedback timing & affordances / JND
@@ -9,17 +10,22 @@ import { useState, useRef, useCallback, useEffect } from "react";
 
 const JND_MS = 100; // just-noticeable difference threshold
 
-export function Lesson07() {
-  const [responseDelay, setResponseDelay] = useState(0);
-  const [touchDownOn, setTouchDownOn] = useState(true);
-  const [hapticOn, setHapticOn] = useState(false);
+interface Props {
+  initialParams?: ParamRecord;
+  onParamsChange?: (key: string, val: string | number | boolean) => void;
+}
+
+export function Lesson07({ initialParams = {}, onParamsChange }: Props) {
+  const [responseDelay, setResponseDelay] = useState((initialParams.delay as number) ?? 0);
+  const [touchDownOn, setTouchDownOn] = useState((initialParams.td as number) !== 0);
+  const [hapticOn, setHapticOn] = useState((initialParams.haptic as number) === 1);
   const [hapticSupported, setHapticSupported] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<"idle" | "down" | "confirming" | "confirmed">("idle");
   const [pressCount, setPressCount] = useState(0);
 
-  const delayRef = useRef(0);
-  const touchDownRef = useRef(true);
-  const hapticRef = useRef(false);
+  const delayRef = useRef(responseDelay);
+  const touchDownRef = useRef(touchDownOn);
+  const hapticRef = useRef(hapticOn);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { delayRef.current = responseDelay; }, [responseDelay]);
@@ -73,6 +79,21 @@ export function Lesson07() {
 
   // Color for JND zone
   const inJndZone = responseDelay >= JND_MS;
+
+  function handleDelayChange(v: number) {
+    setResponseDelay(v);
+    onParamsChange?.("delay", v);
+  }
+
+  function handleTouchDownChange(checked: boolean) {
+    setTouchDownOn(checked);
+    onParamsChange?.("td", checked ? 1 : 0);
+  }
+
+  function handleHapticChange(checked: boolean) {
+    setHapticOn(checked);
+    onParamsChange?.("haptic", checked ? 1 : 0);
+  }
 
   return (
     <div>
@@ -186,7 +207,7 @@ export function Lesson07() {
             className="ds-slider"
             min={0} max={300} step={10}
             value={responseDelay}
-            onChange={e => setResponseDelay(Number(e.target.value))}
+            onChange={e => handleDelayChange(Number(e.target.value))}
             aria-label="Response delay in milliseconds"
           />
           {/* JND marker overlay */}
@@ -208,7 +229,7 @@ export function Lesson07() {
               type="checkbox"
               id="touchdown-toggle"
               checked={touchDownOn}
-              onChange={e => setTouchDownOn(e.target.checked)}
+              onChange={e => handleTouchDownChange(e.target.checked)}
               aria-label="Touch-down highlight toggle"
             />
             <span style={{ fontSize: "var(--fs-label)", fontWeight: 500, letterSpacing: "var(--ls-label)", textTransform: "uppercase", color: "var(--grey-600)" }}>
@@ -221,7 +242,7 @@ export function Lesson07() {
               type="checkbox"
               id="haptic-toggle"
               checked={hapticOn}
-              onChange={e => setHapticOn(e.target.checked)}
+              onChange={e => handleHapticChange(e.target.checked)}
               disabled={hapticSupported === false}
               aria-label="Haptic feedback toggle"
             />

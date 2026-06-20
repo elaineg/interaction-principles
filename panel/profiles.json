@@ -1,0 +1,78 @@
+{
+  "version": "2026-06-12 ICP reorientation (Elaine directive)",
+  "audience": "people who work at a computer all day; recurring weekly workflows",
+  "app": "interaction-principles — interactive learning interface teaching how interfaces FEEL (8 hands-on lessons: direct manipulation/1:1 tracking, spring vs easing, interruptibility, the 12 animation principles, velocity-handoff/flick, latency/frame-budget/jank, feedback-timing/JND, spatial continuity). Each lesson = plain-English explanation + live demo with parameters as controls + A/B good-vs-bad + 'why it matters for your portfolio' note. Free, no signup, client-side.",
+  "note": "Audience fit is deliberately narrow: genuine core = product/UX designers + front-end engineers + design-curious PMs. Several roster personas (data analyst, ops analyst, brand designer, EM with no time) are weak or non-fits — that is itself a finding, not a reason to fabricate friendlier personas. Motivations below are honest about who would and would not plausibly land here.",
+  "personas": [
+    {
+      "id": 1, "name": "Priya", "role": "Senior backend software engineer",
+      "tech": "high", "device": "desktop, large monitor, keyboard-first",
+      "stack": "terminal + neovim, GitHub, Kubernetes dashboards, Datadog, Linear, Slack",
+      "temperament": "skeptical of new tools; hates signups; will inspect network tab if suspicious; abandons anything slower than a CLI",
+      "motivation": "Backend-focused, rarely touches UI motion. Might land here from a Hacker News thread on 'why interfaces feel laggy' — curious about the frame-budget/jank and latency lesson as a systems-performance topic, but the design-craft framing and 'portfolio' notes are not for her. A genuine fringe/weak fit."
+    },
+    {
+      "id": 2, "name": "Marcus", "role": "Frontend engineer, 2 years in",
+      "tech": "high", "device": "desktop, Chrome with devtools open",
+      "stack": "VS Code, GitHub, Vercel, Figma dev mode, Storybook, Discord/Slack",
+      "temperament": "enthusiastic early adopter; shares tools in team Slack when impressed; notices janky CSS instantly",
+      "motivation": "Dead-center audience. Ships UI animations and keeps copying spring configs without understanding interruptibility or velocity handoff. Lands here to finally grok spring-vs-easing and flick physics hands-on, and will share in team Slack if the demos feel real and not hand-wavy."
+    },
+    {
+      "id": 3, "name": "Wen", "role": "Marketing data analyst",
+      "tech": "high-medium", "device": "desktop, two monitors",
+      "stack": "BigQuery/SQL, Google Sheets, Looker Studio, dbt, GA4, Slack",
+      "temperament": "lives in data hygiene; distrusts tools that transform data invisibly; wants CSV in/out everywhere",
+      "motivation": "Non-fit. Her world is CSVs and dashboards, not interaction motion. Might open it out of idle curiosity from a shared link but has no recurring use and no portfolio of interfaces. Honest weak/non-fit; her score should reflect that, not be inflated."
+    },
+    {
+      "id": 4, "name": "Tomás", "role": "Operations analyst at a mid-size company",
+      "tech": "medium", "device": "corporate Windows laptop, Edge",
+      "stack": "Excel (power user), Tableau, Jira, Teams, SharePoint",
+      "temperament": "pragmatic; IT blocks installs so browser tools appeal; wary of pasting company data into random sites",
+      "motivation": "Non-fit. Builds spreadsheets and Tableau views, never crafts UI animation. The browser-tool, no-install angle appeals abstractly but the content has no place in his weekly workflow. Honest non-fit."
+    },
+    {
+      "id": 5, "name": "Dana", "role": "Demand-gen marketer",
+      "tech": "medium", "device": "MacBook in cafes; phone between meetings",
+      "stack": "HubSpot, GA4, Notion, Canva, LinkedIn Campaign Manager, Google Ads",
+      "temperament": "ruthless about time; if value isn't obvious in one scroll she's gone; screenshots tools she likes for the team channel",
+      "motivation": "Weak fit. Works in Canva and landing pages, so she has a faint stake in 'why does this animation feel cheap' — but she briefs designers, she doesn't build motion. If value isn't obvious in one scroll she's gone, and an 8-lesson curriculum is a big ask for her."
+    },
+    {
+      "id": 6, "name": "Jules", "role": "Content & community marketer",
+      "tech": "medium", "device": "50/50 desktop and mobile",
+      "stack": "Notion, Buffer, Mailchimp, Figma (consuming), X/LinkedIn/Mastodon, Discord",
+      "temperament": "posts constantly, juggles platform quirks daily; allergic to anything requiring a login for a small job",
+      "motivation": "Weak/curious fit. Consumes Figma rather than building, posts design-adjacent content, and might find the lessons share-worthy as 'cool explainer' material. But she has no portfolio and no recurring need to tune interaction parameters herself."
+    },
+    {
+      "id": 7, "name": "Aisha", "role": "Product designer",
+      "tech": "medium-high", "device": "desktop, big display, trackpad",
+      "stack": "Figma, FigJam, Notion, Loom, Maze, Slack",
+      "temperament": "judges craft hard — spacing, copy tone, empty states; a clumsy UI loses her regardless of utility; advocates loudly for tools that feel considered",
+      "motivation": "Dead-center audience. Designs interactions but often can't articulate WHY a transition feels right to engineers; hands off prototypes that lose their feel in build. Lands here to get vocabulary (spring, interruptibility, JND) and A/B proof to defend craft. Will judge the tool's own motion mercilessly."
+    },
+    {
+      "id": 8, "name": "Rob", "role": "Brand/visual designer, freelance",
+      "tech": "medium", "device": "desktop, color-calibrated monitor",
+      "stack": "Figma, Illustrator, Photoshop, Google Drive, client Slacks/emails",
+      "temperament": "does repetitive asset-prep grunt work weekly; price-sensitive; compares everything to 'I could do this in Photoshop in 4 minutes'",
+      "motivation": "Borderline fit. Visual/brand work is static asset prep, not interaction motion — but freelancers increasingly get asked to deliver 'a bit of motion' and he'd want to bluff competence. Curious-but-not-core; recurrence is low for him."
+    },
+    {
+      "id": 9, "name": "Elena", "role": "Engineering manager (8 reports)",
+      "tech": "medium-high but no time", "device": "laptop + phone, half the day in meetings",
+      "stack": "Google Calendar (wall-to-wall), Slack, Linear, Google Docs, Zoom, dashboards she skims",
+      "temperament": "30-second patience budget; uses tools between meetings on her phone; anything requiring setup is dead to her; recommends tools that save her reports time",
+      "motivation": "Weak fit. Manages front-end engineers so she has secondhand stake — might bookmark it as a learning resource for a report who keeps shipping janky UI. But a 30-second patience budget vs. an 8-lesson interactive curriculum is a hard mismatch; she won't walk it herself."
+    },
+    {
+      "id": 10, "name": "Sam", "role": "Product manager",
+      "tech": "medium", "device": "mobile-heavy between meetings, laptop otherwise",
+      "stack": "Notion, Sheets, Slack, Zoom, Asana, Amplitude (skims), endless browser tabs",
+      "temperament": "synthesizes and shares constantly — exports, links, screenshots; values anything that makes him look organized; mild tech confidence, won't debug anything",
+      "motivation": "Design-curious PM — the soft edge of the core audience. Writes specs for features with motion and often can't tell his designer/engineer what 'feels off.' Lands here to get shared language so reviews go better, and would share a good explainer. Won't tolerate slow onboarding or jargon without payoff."
+    }
+  ]
+}

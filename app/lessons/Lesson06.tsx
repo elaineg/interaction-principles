@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { recordFrame, budgetRatio, isFrameDropped, burnMs, makeFpsState, FpsState } from "../../lib/engine/fps";
 import { CopyConfigBtn } from "./CopyConfigBtn";
+import type { ParamRecord } from "../../lib/lessonParams";
 
 /**
  * Lesson 06 — Latency, frame budget & jank
@@ -16,11 +17,16 @@ const STAGE_H = 180;
 const TIMELINE_H = 24;
 const MAX_TIMELINE = 60; // frames to show
 
-export function Lesson06() {
+interface Props {
+  initialParams?: ParamRecord;
+  onParamsChange?: (key: string, val: string | number | boolean) => void;
+}
+
+export function Lesson06({ initialParams = {}, onParamsChange }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const [hz, setHz] = useState<60 | 120>(60);
-  const [injectWork, setInjectWork] = useState(0);
-  const [showDropped, setShowDropped] = useState(true);
+  const [hz, setHz] = useState<60 | 120>(((initialParams.hz as number) ?? 60) as 60 | 120);
+  const [injectWork, setInjectWork] = useState((initialParams.inject as number) ?? 0);
+  const [showDropped, setShowDropped] = useState((initialParams.dropped as number) !== 0);
   const [running, setRunning] = useState(false);
   const [fpsDisplay, setFpsDisplay] = useState(0);
   const [lastDeltaMs, setLastDeltaMs] = useState(16.67);
@@ -32,8 +38,8 @@ export function Lesson06() {
   const ballXRef = useRef(0);
   const ballDirRef = useRef(1);
   const stageWRef = useRef(300);
-  const hzRef = useRef<60 | 120>(60);
-  const injectRef = useRef(0);
+  const hzRef = useRef<60 | 120>(hz);
+  const injectRef = useRef(injectWork);
   const timelineRef = useRef<{ delta: number; dropped: boolean }[]>([]);
 
   useEffect(() => { hzRef.current = hz; }, [hz]);
@@ -121,6 +127,21 @@ export function Lesson06() {
     }, 16);
     return () => clearInterval(id);
   }, [running]);
+
+  function handleHzChange(h: 60 | 120) {
+    setHz(h);
+    onParamsChange?.("hz", h);
+  }
+
+  function handleInjectChange(v: number) {
+    setInjectWork(v);
+    onParamsChange?.("inject", v);
+  }
+
+  function handleDroppedChange(checked: boolean) {
+    setShowDropped(checked);
+    onParamsChange?.("dropped", checked ? 1 : 0);
+  }
 
   return (
     <div>
@@ -240,7 +261,7 @@ export function Lesson06() {
               <button
                 key={h}
                 className={`ds-seg__btn${hz === h ? " ds-seg__btn--active" : ""}`}
-                onClick={() => setHz(h)}
+                onClick={() => handleHzChange(h)}
                 aria-pressed={hz === h}
               >
                 {h}HZ
@@ -253,7 +274,7 @@ export function Lesson06() {
               type="checkbox"
               id="dropped-toggle"
               checked={showDropped}
-              onChange={e => setShowDropped(e.target.checked)}
+              onChange={e => handleDroppedChange(e.target.checked)}
               aria-label="Show dropped frame timeline"
             />
             <span style={{ fontSize: "var(--fs-label)", fontWeight: 500, letterSpacing: "var(--ls-label)", textTransform: "uppercase", color: "var(--grey-600)" }}>
@@ -274,7 +295,7 @@ export function Lesson06() {
             className="ds-slider"
             min={0} max={50} step={1}
             value={injectWork}
-            onChange={e => setInjectWork(Number(e.target.value))}
+            onChange={e => handleInjectChange(Number(e.target.value))}
             aria-label="Injected work in milliseconds per frame"
           />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-micro)", color: "var(--grey-400)" }}>

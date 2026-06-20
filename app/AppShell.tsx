@@ -10,6 +10,8 @@ import { Lesson05 } from "./lessons/Lesson05";
 import { Lesson06 } from "./lessons/Lesson06";
 import { Lesson07 } from "./lessons/Lesson07";
 import { Lesson08 } from "./lessons/Lesson08";
+import type { ParamRecord } from "../lib/lessonParams";
+import { decodeParams, buildShareUrl, LESSON_DEFAULTS } from "../lib/lessonParams";
 
 const LS_KEY = "ip-last-lesson";
 
@@ -26,26 +28,35 @@ function lessonFromHash(hash: string): number | null {
   return null;
 }
 
-function getLessonComponent(id: number) {
+function getLessonComponent(
+  id: number,
+  initialParams: ParamRecord,
+  onParamsChange: (key: string, val: string | number | boolean) => void
+) {
   switch (id) {
-    case 1: return <Lesson01 />;
-    case 2: return <Lesson02 />;
+    case 1: return <Lesson01 initialParams={initialParams} onParamsChange={onParamsChange} />;
+    case 2: return <Lesson02 initialParams={initialParams} onParamsChange={onParamsChange} />;
     case 3: return <Lesson03 />;
-    case 4: return <Lesson04 />;
-    case 5: return <Lesson05 />;
-    case 6: return <Lesson06 />;
-    case 7: return <Lesson07 />;
-    case 8: return <Lesson08 />;
-    default: return <Lesson01 />;
+    case 4: return <Lesson04 initialParams={initialParams} onParamsChange={onParamsChange} />;
+    case 5: return <Lesson05 initialParams={initialParams} onParamsChange={onParamsChange} />;
+    case 6: return <Lesson06 initialParams={initialParams} onParamsChange={onParamsChange} />;
+    case 7: return <Lesson07 initialParams={initialParams} onParamsChange={onParamsChange} />;
+    case 8: return <Lesson08 initialParams={initialParams} onParamsChange={onParamsChange} />;
+    default: return <Lesson01 initialParams={{}} onParamsChange={onParamsChange} />;
   }
 }
 
-function CopyButton({ text, label, children }: { text: string; label: string; children: React.ReactNode }) {
+function CopyButton({ getText, label, children }: {
+  getText: () => string;
+  label: string;
+  children: React.ReactNode;
+}) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleCopy() {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
+      const text = getText();
       navigator.clipboard.writeText(text).then(() => {
         setCopied(true);
         if (timerRef.current) clearTimeout(timerRef.current);
@@ -60,6 +71,7 @@ function CopyButton({ text, label, children }: { text: string; label: string; ch
     <button
       onClick={handleCopy}
       aria-label={label}
+      data-copy-link
       title={label}
       style={{
         background: "none",
@@ -78,7 +90,11 @@ function CopyButton({ text, label, children }: { text: string; label: string; ch
         minWidth: 88,
       }}
     >
-      {copied ? "COPIED ✓" : children}
+      {/* sr-only confirmation so screen readers + sighted users both get feedback */}
+      <span aria-live="polite" className="sr-only">
+        {copied ? "Link copied" : ""}
+      </span>
+      <span aria-hidden>{copied ? "COPIED ✓" : children}</span>
     </button>
   );
 }
@@ -86,29 +102,52 @@ function CopyButton({ text, label, children }: { text: string; label: string; ch
 export default function AppShell() {
   // SSR-safe: init to 1, read hash/localStorage in effect
   const [activeLesson, setActiveLesson] = useState(1);
-  const [hz, setHz] = useState<60 | 120>(60);
   const [menuOpen, setMenuOpen] = useState(false);
-  // Track current full URL for deep-link copying
-  const [currentUrl, setCurrentUrl] = useState("");
+
+  // Per-lesson param tracking. paramsRef is always fresh; paramsState triggers re-render.
+  const paramsRef = useRef<ParamRecord>({ ...LESSON_DEFAULTS[1] });
+  const [paramsState, setParamsState] = useState<ParamRecord>({ ...LESSON_DEFAULTS[1] });
+  // Initial params decoded from URL (per lesson, reset when lesson switches)
+  const [initialParams, setInitialParams] = useState<ParamRecord>({});
+
+  const handleParamsChange = useCallback((key: string, val: string | number | boolean) => {
+    paramsRef.current = { ...paramsRef.current, [key]: val };
+    setParamsState(prev => ({ ...prev, [key]: val }));
+  }, []);
+
+  // Reset params when switching lessons
+  const resetParamsForLesson = useCallback((id: number, urlSearch?: string) => {
+    const decoded = urlSearch
+      ? decodeParams(id, urlSearch)
+      : { ...(LESSON_DEFAULTS[id] ?? {}) };
+    paramsRef.current = { ...decoded };
+    setParamsState({ ...decoded });
+    setInitialParams({ ...decoded });
+  }, []);
+
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     // Priority: hash > localStorage > default 1
     const hashLesson = lessonFromHash(window.location.hash);
+    const urlSearch = window.location.search;
     if (hashLesson !== null) {
       setActiveLesson(hashLesson);
+      resetParamsForLesson(hashLesson, urlSearch);
     } else {
       const stored = window.localStorage.getItem(LS_KEY);
       if (stored) {
         const n = parseInt(stored, 10);
-        if (n >= 1 && n <= 8) setActiveLesson(n);
+        if (n >= 1 && n <= 8) {
+          setActiveLesson(n);
+          resetParamsForLesson(n, "");
+        }
+      } else {
+        resetParamsForLesson(1, "");
       }
     }
-    // Set initial URL
-    setCurrentUrl(window.location.href.split("#")[0] + hashForLesson(
-      lessonFromHash(window.location.hash) ??
-      (window.localStorage.getItem(LS_KEY) ? parseInt(window.localStorage.getItem(LS_KEY)!, 10) : 1)
-    ));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for hashchange (e.g. browser back/forward)
   useEffect(() => {
@@ -116,39 +155,46 @@ export default function AppShell() {
       const hashLesson = lessonFromHash(window.location.hash);
       if (hashLesson !== null) {
         setActiveLesson(hashLesson);
+        resetParamsForLesson(hashLesson, window.location.search);
       }
     }
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
+  }, [resetParamsForLesson]);
 
   // Update hash whenever activeLesson changes (after mount)
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  // This effect only runs when switching via lesson load from URL — goToLesson handles
+  // programmatic switches. We only need to set hash on initial mount resolution.
   useEffect(() => {
     if (!mounted) return;
     const newHash = hashForLesson(activeLesson);
     if (window.location.hash !== newHash) {
-      window.history.replaceState(null, "", newHash);
+      // Preserve existing query params from a deep-link (they were already applied)
+      const cleanUrl = window.location.pathname + window.location.search + newHash;
+      window.history.replaceState(null, "", cleanUrl);
     }
-    setCurrentUrl(window.location.href.split("#")[0] + newHash);
   }, [activeLesson, mounted]);
 
   const goToLesson = useCallback((id: number) => {
     setActiveLesson(id);
     setMenuOpen(false);
+    resetParamsForLesson(id, "");
     if (typeof window !== "undefined") {
       window.localStorage.setItem(LS_KEY, String(id));
+      // Clear query params when navigating to a new lesson (use path + hash, no search)
+      const cleanUrl = window.location.pathname + hashForLesson(id);
+      window.history.replaceState(null, "", cleanUrl);
     }
-  }, []);
+  }, [resetParamsForLesson]);
+
+  // Build share URL from current state (called lazily at copy time)
+  const getShareUrl = useCallback(() => {
+    if (typeof window === "undefined") return "";
+    const base = window.location.href;
+    return buildShareUrl(base, activeLesson, paramsRef.current);
+  }, [activeLesson]);
 
   const lesson = LESSONS[activeLesson - 1];
-
-  // Build a "copy config" link for lessons with interesting param state (L01, L02, L06)
-  // We pass down a setter to collect the current params text from child lessons
-  // For simplicity, we just show the deep link for all lessons;
-  // and for L01/L02/L06 we additionally surface a text summary via a portal approach.
-  // Per spec: "copy a short text summary of the current parameters" is fine.
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", overflow: "hidden" }}>
@@ -180,32 +226,10 @@ export default function AppShell() {
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)" }}>
-          <span className="ds-label ds-label--secondary" style={{ fontSize: "var(--fs-micro)" }}>
+          <span className="ds-label ds-label--secondary" style={{ fontSize: "var(--fs-micro)" }} id="lessons-count-label">
             08 LESSONS
           </span>
-          {/* Hz switch with tooltip */}
-          <button
-            className="ds-seg__btn"
-            style={{
-              background: "transparent",
-              border: "1px solid var(--grey-200)",
-              padding: "4px 8px",
-              fontSize: "var(--fs-micro)",
-              fontFamily: "var(--ds-font)",
-              fontWeight: 500,
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-              cursor: "pointer",
-              color: "var(--grey-600)",
-              minHeight: 32,
-            }}
-            onClick={() => setHz(hz === 60 ? 120 : 60)}
-            aria-label={`Refresh-rate target: currently ${hz}Hz — click to switch to ${hz === 60 ? "120" : "60"}Hz`}
-            title={`Refresh-rate target (${hz}Hz). Click to toggle 60 ↔ 120Hz.`}
-          >
-            {hz}HZ
-          </button>
-          {/* Mobile menu toggle */}
+          {/* Mobile menu toggle — always rendered, shown/hidden via CSS */}
           <button
             className="ds-btn--text"
             style={{
@@ -234,6 +258,7 @@ export default function AppShell() {
         <style>{`
           @media (max-width: 768px) {
             #mobile-menu-btn { display: inline-flex !important; align-items: center; justify-content: center; }
+            #lessons-count-label { display: none !important; }
           }
         `}</style>
       </header>
@@ -298,6 +323,7 @@ export default function AppShell() {
                 >
                   {l.slug.replace(/-/g, " ")}
                 </span>
+                {/* subtitle — single source of truth from l.subtitle */}
                 <span
                   style={{
                     fontSize: "var(--fs-micro)",
@@ -363,6 +389,7 @@ export default function AppShell() {
                   <span style={{ fontSize: "var(--fs-body)", fontWeight: isActive ? 500 : 400, color: isActive ? "var(--ink)" : "var(--grey-600)" }}>
                     {l.headline}
                   </span>
+                  {/* subtitle — single source of truth from l.subtitle */}
                   <span style={{ fontSize: "var(--fs-micro)", color: "var(--grey-400)" }}>
                     {l.subtitle}
                   </span>
@@ -377,129 +404,199 @@ export default function AppShell() {
           style={{
             flex: 1,
             overflowY: "auto",
-            padding: "var(--sp-12) var(--sp-8)",
+            padding: "0",
             minWidth: 0,
           }}
           id="main-content"
         >
-          {/* Eyebrow + copy actions row */}
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)", marginBottom: "var(--sp-4)", flexWrap: "wrap" }}>
-            <span className="ds-eyebrow" style={{ flex: 1, minWidth: 0 }}>
-              {lesson.eyebrow}
-            </span>
-            {/* Copy lesson link */}
-            <CopyButton
-              text={currentUrl}
-              label="Copy link to this lesson"
+          {/* TITLE CARD — quiet tone-setting hero, full-width above lesson content */}
+          <div
+            data-testid="title-card"
+            style={{
+              borderBottom: "1px solid var(--grey-200)",
+              padding: "var(--sp-8) var(--sp-8) var(--sp-6)",
+              background: "var(--paper)",
+            }}
+          >
+            <span
+              style={{
+                display: "block",
+                fontSize: "var(--fs-micro)",
+                fontWeight: 500,
+                letterSpacing: "0.22em",
+                textTransform: "uppercase",
+                color: "var(--grey-600)",
+                marginBottom: "var(--sp-3)",
+              }}
             >
-              COPY LINK
-            </CopyButton>
-          </div>
-
-          {/* Headline */}
-          <h1
-            style={{
-              fontSize: "clamp(1.5rem, 3vw, var(--fs-display))",
-              fontWeight: 400,
-              lineHeight: 1.1,
-              letterSpacing: "-0.02em",
-              marginBottom: "var(--sp-6)",
-              maxWidth: 680,
-            }}
-          >
-            {lesson.headline}
-          </h1>
-
-          {/* Lede */}
-          <p
-            style={{
-              fontSize: "var(--fs-body)",
-              color: "var(--grey-800)",
-              maxWidth: 560,
-              lineHeight: "var(--lh-body)",
-              marginBottom: "var(--sp-12)",
-            }}
-          >
-            {lesson.lede}
-          </p>
-
-          {/* Lesson demo */}
-          {getLessonComponent(activeLesson)}
-
-          {/* Why it matters */}
-          <div className="why-block" style={{ maxWidth: 600, marginTop: "var(--sp-12)" }}>
-            <h4>Why it matters for your portfolio</h4>
-            <p style={{ fontSize: "var(--fs-body)", color: "var(--grey-800)", lineHeight: "var(--lh-body)" }}>
-              {lesson.whyItMatters}
+              INTERACTION DESIGN — 08 LESSONS
+            </span>
+            <h2
+              style={{
+                fontSize: "clamp(1.5rem, 2.5vw, var(--fs-display))",
+                fontWeight: 400,
+                lineHeight: 1.1,
+                letterSpacing: "-0.02em",
+                marginBottom: "var(--sp-2)",
+                color: "var(--ink)",
+              }}
+            >
+              feel how interfaces should move.
+            </h2>
+            <p
+              style={{
+                fontSize: "var(--fs-body)",
+                color: "var(--grey-600)",
+                margin: 0,
+              }}
+            >
+              grab the controls. feel the physics. free, no signup.
             </p>
           </div>
 
-          {/* Prev / Next nav */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginTop: "var(--sp-16)",
-              borderTop: "1px solid var(--grey-200)",
-              paddingTop: "var(--sp-6)",
-            }}
-          >
-            {activeLesson > 1 ? (
-              <button
-                className="ds-btn ds-btn--secondary ds-btn--text"
-                onClick={() => goToLesson(activeLesson - 1)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "var(--fs-label)",
-                  letterSpacing: "var(--ls-label)",
-                  textTransform: "uppercase",
-                  fontFamily: "var(--ds-font)",
-                  fontWeight: 500,
-                  color: "var(--ink)",
-                  padding: "8px 0",
-                  minHeight: 40,
-                }}
+          {/* Lesson content area */}
+          <div style={{ padding: "var(--sp-8) var(--sp-8)" }}>
+            {/* Eyebrow + copy actions row */}
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)", marginBottom: "var(--sp-4)", flexWrap: "wrap" }}>
+              <span className="ds-eyebrow" style={{ flex: 1, minWidth: 0 }}>
+                {lesson.eyebrow}
+              </span>
+              {/* Copy lesson link — encodes current control state */}
+              <CopyButton
+                getText={getShareUrl}
+                label="Copy link to this lesson"
               >
-                ← LESSON {String(activeLesson - 1).padStart(2, "0")}
-              </button>
-            ) : (
-              <span />
-            )}
-            {activeLesson < 8 ? (
-              <button
-                className="ds-btn ds-btn--secondary ds-btn--text"
-                onClick={() => goToLesson(activeLesson + 1)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "var(--fs-label)",
-                  letterSpacing: "var(--ls-label)",
-                  textTransform: "uppercase",
-                  fontFamily: "var(--ds-font)",
-                  fontWeight: 500,
-                  color: "var(--ink)",
-                  padding: "8px 0",
-                  minHeight: 40,
-                }}
-              >
-                LESSON {String(activeLesson + 1).padStart(2, "0")} →
-              </button>
-            ) : (
-              <span />
-            )}
+                COPY LINK
+              </CopyButton>
+            </div>
+
+            {/* Headline */}
+            <h1
+              style={{
+                fontSize: "clamp(1.5rem, 3vw, var(--fs-display))",
+                fontWeight: 400,
+                lineHeight: 1.1,
+                letterSpacing: "-0.02em",
+                marginBottom: "var(--sp-3)",
+                maxWidth: 680,
+              }}
+            >
+              {lesson.headline}
+            </h1>
+
+            {/* Subtitle — single source of truth from lesson.subtitle */}
+            <p
+              data-testid="lesson-subtitle"
+              style={{
+                fontSize: "var(--fs-body)",
+                color: "var(--grey-600)",
+                marginBottom: "var(--sp-4)",
+                maxWidth: 560,
+              }}
+            >
+              {lesson.subtitle}
+            </p>
+
+            {/* Lede */}
+            <p
+              style={{
+                fontSize: "var(--fs-body)",
+                color: "var(--grey-800)",
+                maxWidth: 560,
+                lineHeight: "var(--lh-body)",
+                marginBottom: "var(--sp-12)",
+              }}
+            >
+              {lesson.lede}
+            </p>
+
+            {/* Lesson demo */}
+            {mounted && getLessonComponent(activeLesson, initialParams, handleParamsChange)}
+
+            {/* Prev / Next nav */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginTop: "var(--sp-16)",
+                borderTop: "1px solid var(--grey-200)",
+                paddingTop: "var(--sp-6)",
+              }}
+            >
+              {activeLesson > 1 ? (
+                <button
+                  className="ds-btn ds-btn--secondary ds-btn--text"
+                  onClick={() => goToLesson(activeLesson - 1)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "var(--fs-label)",
+                    letterSpacing: "var(--ls-label)",
+                    textTransform: "uppercase",
+                    fontFamily: "var(--ds-font)",
+                    fontWeight: 500,
+                    color: "var(--ink)",
+                    padding: "8px 0",
+                    minHeight: 40,
+                  }}
+                >
+                  ← LESSON {String(activeLesson - 1).padStart(2, "0")}
+                </button>
+              ) : (
+                <span />
+              )}
+              {activeLesson < 8 ? (
+                <button
+                  className="ds-btn ds-btn--secondary ds-btn--text"
+                  onClick={() => goToLesson(activeLesson + 1)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "var(--fs-label)",
+                    letterSpacing: "var(--ls-label)",
+                    textTransform: "uppercase",
+                    fontFamily: "var(--ds-font)",
+                    fontWeight: 500,
+                    color: "var(--ink)",
+                    padding: "8px 0",
+                    minHeight: 40,
+                  }}
+                >
+                  LESSON {String(activeLesson + 1).padStart(2, "0")} →
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
           </div>
         </main>
       </div>
 
       {/* MOBILE RAIL: horizontal scroll strip */}
       <style>{`
+        .sr-only {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0,0,0,0);
+          white-space: nowrap;
+          border: 0;
+        }
         @media (max-width: 768px) {
           #lesson-rail { display: none !important; }
           #main-content {
-            padding: var(--sp-6) var(--sp-4) !important;
+            padding: 0 !important;
+          }
+          #main-content > div:first-child {
+            padding: var(--sp-6) var(--sp-4) var(--sp-4) !important;
+          }
+          #main-content > div:last-child {
+            padding: var(--sp-4) var(--sp-4) !important;
           }
         }
         @media (min-width: 769px) {

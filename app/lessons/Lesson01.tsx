@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { CopyConfigBtn } from "./CopyConfigBtn";
+import type { ParamRecord } from "../../lib/lessonParams";
 
 /**
  * Lesson 01 — Direct manipulation & 1:1 tracking
@@ -11,7 +12,12 @@ import { CopyConfigBtn } from "./CopyConfigBtn";
 
 const SQUARE_SIZE = 48;
 
-export function Lesson01() {
+interface Props {
+  initialParams?: ParamRecord;
+  onParamsChange?: (key: string, val: string | number | boolean) => void;
+}
+
+export function Lesson01({ initialParams = {}, onParamsChange }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
 
   // Position of the square (center of the square)
@@ -19,15 +25,21 @@ export function Lesson01() {
   // True pointer position within the stage
   const [pointerPos, setPointerPos] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [gain, setGain] = useState<0.5 | 1 | 2>(1);
-  const [latency, setLatency] = useState(0);
+
+  // Restore from initialParams or defaults
+  const initGain = (initialParams.g as 0.5 | 1 | 2) ?? 1;
+  const initLatency = (initialParams.lat as number) ?? 0;
+
+  const [gain, setGain] = useState<0.5 | 1 | 2>(initGain);
+  const [latency, setLatency] = useState(initLatency);
   const [initialized, setInitialized] = useState(false);
 
   // Pending move queue for latency simulation
   const pendingRef = useRef<Array<{ x: number; y: number; at: number }>>([]);
   const rafRef = useRef<number>(0);
-  // Drag offset from square center to pointer at grab time
-  const dragOffset = useRef({ x: 0, y: 0 });
+  // Drag anchor: object pos + pointer pos at pointerdown
+  const anchorObjRef = useRef({ x: 0, y: 0 });
+  const anchorPtrRef = useRef({ x: 0, y: 0 });
   // Pointer position during drag (raw stage coords)
   const rawPointer = useRef({ x: 0, y: 0 });
 
@@ -72,13 +84,17 @@ export function Lesson01() {
     }
   }, []);
 
-  const applyMove = useCallback(
-    (rawX: number, rawY: number, centerX: number, centerY: number) => {
-      // Apply gain relative to center
-      const dx = (rawX - centerX) * gain;
-      const dy = (rawY - centerY) * gain;
-      let nx = centerX + dx;
-      let ny = centerY + dy;
+  const applyMoveAnchored = useCallback(
+    (currentPtrX: number, currentPtrY: number) => {
+      // Correct gain semantics:
+      // objectPos = anchorObj + gain × (currentPointer − anchorPtr)
+      // At gain=1: object moves exactly pointer distance (1:1)
+      // At gain=0.5: object moves half pointer distance
+      // At gain=2: object moves twice pointer distance
+      const dxPtr = currentPtrX - anchorPtrRef.current.x;
+      const dyPtr = currentPtrY - anchorPtrRef.current.y;
+      let nx = anchorObjRef.current.x + gain * dxPtr;
+      let ny = anchorObjRef.current.y + gain * dyPtr;
 
       // Clamp to stage bounds
       const half = SQUARE_SIZE / 2;
@@ -102,7 +118,9 @@ export function Lesson01() {
       const rect = stageRef.current!.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
-      dragOffset.current = { x: sx - pos.x, y: sy - pos.y };
+      // Capture anchor: object position + pointer position at grab time
+      anchorObjRef.current = { x: pos.x, y: pos.y };
+      anchorPtrRef.current = { x: sx, y: sy };
       rawPointer.current = { x: sx, y: sy };
       setPointerPos({ x: sx, y: sy });
       setIsDragging(true);
@@ -118,12 +136,9 @@ export function Lesson01() {
       const sy = e.clientY - rect.top;
       rawPointer.current = { x: sx, y: sy };
       setPointerPos({ x: sx, y: sy });
-      // Target position = pointer minus drag offset (adjusted by gain relative to grab point)
-      const targetX = sx - dragOffset.current.x;
-      const targetY = sy - dragOffset.current.y;
-      applyMove(targetX, targetY, targetX, targetY);
+      applyMoveAnchored(sx, sy);
     },
-    [isDragging, applyMove]
+    [isDragging, applyMoveAnchored]
   );
 
   const onPointerUp = useCallback(() => {
@@ -136,6 +151,16 @@ export function Lesson01() {
   const deltaX = Math.round(pointerPos.x - pos.x);
   const deltaY = Math.round(pointerPos.y - pos.y);
   const delta = Math.round(Math.sqrt(deltaX * deltaX + deltaY * deltaY));
+
+  function handleGainChange(g: 0.5 | 1 | 2) {
+    setGain(g);
+    onParamsChange?.("g", g);
+  }
+
+  function handleLatencyChange(v: number) {
+    setLatency(v);
+    onParamsChange?.("lat", v);
+  }
 
   return (
     <div>
@@ -217,7 +242,7 @@ export function Lesson01() {
               <button
                 key={g}
                 className={`ds-seg__btn${gain === g ? " ds-seg__btn--active" : ""}`}
-                onClick={() => setGain(g)}
+                onClick={() => handleGainChange(g)}
                 aria-pressed={gain === g}
                 aria-label={`Gain ${g}×`}
               >
@@ -247,7 +272,7 @@ export function Lesson01() {
             max={200}
             step={5}
             value={latency}
-            onChange={e => setLatency(Number(e.target.value))}
+            onChange={e => handleLatencyChange(Number(e.target.value))}
             aria-label="Added latency in milliseconds"
           />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-micro)", color: "var(--grey-400)" }}>

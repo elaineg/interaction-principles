@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { stepSpring, makeSpringState, SpringState, SpringParams } from "../../lib/engine/spring";
 import { CopyConfigBtn } from "./CopyConfigBtn";
+import type { ParamRecord } from "../../lib/lessonParams";
 
 /**
  * Lesson 02 — Physics spring vs easing curve
@@ -42,16 +43,31 @@ function cubicBezier(t: number, p1x: number, p1y: number, p2x: number, p2y: numb
 
 type Direction = "left" | "right";
 
-export function Lesson02() {
+interface Props {
+  initialParams?: ParamRecord;
+  onParamsChange?: (key: string, val: string | number | boolean) => void;
+}
+
+export function Lesson02({ initialParams = {}, onParamsChange }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
 
-  // Spring state
-  const [springParams, setSpringParams] = useState<SpringParams>({ mass: 1, stiffness: 180, damping: 20 });
+  // Spring state — restore from initialParams
+  const [springParams, setSpringParams] = useState<SpringParams>({
+    mass: (initialParams.m as number) ?? 1,
+    stiffness: (initialParams.k as number) ?? 180,
+    damping: (initialParams.d as number) ?? 20,
+  });
   // Easing
-  const [duration, setDuration] = useState(400); // ms
-  const [bezierP1, setBezierP1] = useState({ x: 0.25, y: 0.1 });
-  const [bezierP2, setBezierP2] = useState({ x: 0.25, y: 1.0 });
+  const [duration, setDuration] = useState((initialParams.dur as number) ?? 400); // ms
+  const [bezierP1, setBezierP1] = useState({
+    x: (initialParams.p1x as number) ?? 0.25,
+    y: (initialParams.p1y as number) ?? 0.1,
+  });
+  const [bezierP2, setBezierP2] = useState({
+    x: (initialParams.p2x as number) ?? 0.25,
+    y: (initialParams.p2y as number) ?? 1.0,
+  });
 
   // Animation state
   const [springPos, setSpringPos] = useState(20); // x within left half
@@ -71,9 +87,9 @@ export function Lesson02() {
   const dirRef = useRef<Direction>("right");
   const springPlotRef = useRef<number[]>([]);
   const easingPlotRef = useRef<number[]>([]);
-  const durationRef = useRef(400);
-  const bezierRef = useRef({ p1: { x: 0.25, y: 0.1 }, p2: { x: 0.25, y: 1.0 } });
-  const springParamsRef = useRef<SpringParams>({ mass: 1, stiffness: 180, damping: 20 });
+  const durationRef = useRef(duration);
+  const bezierRef = useRef({ p1: bezierP1, p2: bezierP2 });
+  const springParamsRef = useRef<SpringParams>(springParams);
 
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { bezierRef.current = { p1: bezierP1, p2: bezierP2 }; }, [bezierP1, bezierP2]);
@@ -170,9 +186,13 @@ export function Lesson02() {
     if (p1Dragging.current) {
       const pt = svgPtToParam(e.clientX, e.clientY);
       setBezierP1(pt);
+      onParamsChange?.("p1x", parseFloat(pt.x.toFixed(3)));
+      onParamsChange?.("p1y", parseFloat(pt.y.toFixed(3)));
     } else if (p2Dragging.current) {
       const pt = svgPtToParam(e.clientX, e.clientY);
       setBezierP2(pt);
+      onParamsChange?.("p2x", parseFloat(pt.x.toFixed(3)));
+      onParamsChange?.("p2y", parseFloat(pt.y.toFixed(3)));
     }
   }
 
@@ -289,6 +309,7 @@ export function Lesson02() {
             <div style={{ fontSize: "var(--fs-label)", fontWeight: 500, letterSpacing: "var(--ls-label)", textTransform: "uppercase", color: "var(--grey-600)", marginBottom: "var(--sp-4)" }}>SPRING PARAMS</div>
             {(["mass", "stiffness", "damping"] as const).map((param) => {
               const ranges = { mass: [0.2, 3, 0.1], stiffness: [50, 500, 10], damping: [1, 60, 1] };
+              const keyMap = { mass: "m", stiffness: "k", damping: "d" } as const;
               const [min, max, step] = ranges[param];
               return (
                 <div className="control-group" key={param} style={{ marginBottom: "var(--sp-4)" }}>
@@ -301,7 +322,11 @@ export function Lesson02() {
                     className="ds-slider"
                     min={min} max={max} step={step}
                     value={springParams[param]}
-                    onChange={e => setSpringParams(p => ({ ...p, [param]: Number(e.target.value) }))}
+                    onChange={e => {
+                      const val = Number(e.target.value);
+                      setSpringParams(p => ({ ...p, [param]: val }));
+                      onParamsChange?.(keyMap[param], val);
+                    }}
                     aria-label={`Spring ${param}`}
                   />
                 </div>
@@ -317,7 +342,18 @@ export function Lesson02() {
                 <span>DURATION</span>
                 <span className="readout">{duration} ms</span>
               </label>
-              <input type="range" className="ds-slider" min={100} max={1200} step={50} value={duration} onChange={e => setDuration(Number(e.target.value))} aria-label="Easing duration in ms" />
+              <input
+                type="range"
+                className="ds-slider"
+                min={100} max={1200} step={50}
+                value={duration}
+                onChange={e => {
+                  const val = Number(e.target.value);
+                  setDuration(val);
+                  onParamsChange?.("dur", val);
+                }}
+                aria-label="Easing duration in ms"
+              />
             </div>
             {/* Bezier editor */}
             <div style={{ fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 4 }}>CUBIC-BÉZIER (drag handles)</div>
