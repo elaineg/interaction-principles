@@ -14,41 +14,55 @@
  */
 import { test, expect } from "@playwright/test";
 
-// ─── ITEM 1: Title card/hero ─────────────────────────────────────────────────
-test.describe("Item 1: Title card/hero renders at top", () => {
-  test("title card element with data-testid='title-card' is visible", async ({ page }) => {
+// ─── ITEM 1: Hero / title-card REMOVED (2026-06-20) ─────────────────────────
+// The hero band has been DELETED. These tests now assert ABSENCE of the hero strings.
+test.describe("Item 1 (2026-06-20): Hero/title-card is ABSENT — page goes straight to lessons", () => {
+  test("NO element with data-testid='title-card' exists", async ({ page }) => {
     await page.goto("/");
     const card = page.locator('[data-testid="title-card"]');
-    await expect(card).toBeVisible({ timeout: 5000 });
+    await expect(card).toHaveCount(0);
   });
 
-  test("title card contains an eyebrow with INTERACTION DESIGN — 08 LESSONS", async ({ page }) => {
+  test("hero eyebrow 'INTERACTION DESIGN — 08 LESSONS' does NOT appear on the page", async ({ page }) => {
     await page.goto("/");
-    const card = page.locator('[data-testid="title-card"]');
-    await expect(card).toContainText("INTERACTION DESIGN — 08 LESSONS");
+    const bodyText = await page.locator("body").innerText();
+    // This string should be absent from the page entirely
+    expect(bodyText).not.toContain("INTERACTION DESIGN — 08 LESSONS");
   });
 
-  test("title card contains the display headline", async ({ page }) => {
+  test("hero headline 'feel how interfaces should move.' does NOT appear on page", async ({ page }) => {
     await page.goto("/");
-    const card = page.locator('[data-testid="title-card"]');
-    await expect(card).toContainText("feel how interfaces should move.");
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(/feel how interfaces should move/i);
   });
 
-  test("title card contains the grey subtitle line", async ({ page }) => {
+  test("hero subtitle 'grab the controls. feel the physics' does NOT appear on page", async ({ page }) => {
     await page.goto("/");
-    const card = page.locator('[data-testid="title-card"]');
-    await expect(card).toContainText("grab the controls");
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(/grab the controls\. feel the physics/i);
   });
 
-  test("title card does not push lesson 01 demo below the fold on 1280×800", async ({ page }) => {
+  test("first h1 on page is Lesson 01 headline (not a hero headline)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    // Wait for the lesson to mount
+    await expect(page.getByText(/LESSON 01/i)).toBeVisible({ timeout: 5000 });
+    const h1 = page.locator("h1").first();
+    await expect(h1).toBeVisible();
+    // L01 headline — should NOT be the old hero h2 text
+    const h1Text = await h1.innerText();
+    expect(h1Text.toLowerCase()).not.toContain("feel how interfaces should move");
+  });
+
+  test("Lesson 01 demo stage is near the top — within 500px from viewport top on 1280×800", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
     const stage = page.locator(".demo-canvas").first();
     await expect(stage).toBeVisible({ timeout: 5000 });
-    // The demo stage top should be within the viewport (not below fold)
     const box = await stage.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.y).toBeLessThan(800);
+    // Without the hero band the stage is higher on the page (within first 500px)
+    expect(box!.y).toBeLessThan(500);
   });
 });
 

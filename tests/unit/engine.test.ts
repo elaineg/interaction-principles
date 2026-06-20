@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { stepSpring, makeSpringState, isAtRest } from "../../lib/engine/spring";
 import { addSample, estimateVelocity, velocityMagnitude } from "../../lib/engine/velocity";
 import { stepDecel, restPosition, rubberBand, isDecelDone } from "../../lib/engine/decel";
+import { measureGlide, stepDecelIntegrate } from "../../lib/engine/decelIntegrate";
 import { recordFrame, budgetRatio, isFrameDropped, makeFpsState } from "../../lib/engine/fps";
 
 // ============================================================
@@ -57,6 +58,64 @@ describe("Lesson 01 gain math (anchor-relative)", () => {
     const pos1  = computeObjectPos(anchorObjX, anchorPtrX, currentPtrX, 1);
     // At gain=1, delta≈0. At gain=0.5, object lags behind pointer → delta grows
     expect(Math.abs(currentPtrX - pos05)).toBeGreaterThan(Math.abs(currentPtrX - pos1));
+  });
+});
+
+// ============================================================
+// P0 (2026-06-20): LESSON 05 FRICTION MONOTONICITY — higher friction = shorter glide
+// measureGlide is the verifier-facing contract for the decel slider.
+// ============================================================
+
+describe("L05 friction slider: higher friction → shorter glide (measureGlide)", () => {
+  const V0 = 1000; // fixed lift-off velocity (px/s)
+
+  it("friction=1 (LOW) produces longer glide than friction=6 (MID)", () => {
+    const low = measureGlide(V0, 1);
+    const mid = measureGlide(V0, 6);
+    expect(low.distance).toBeGreaterThan(mid.distance);
+    expect(low.timeToRest).toBeGreaterThan(mid.timeToRest);
+  });
+
+  it("friction=6 (MID) produces longer glide than friction=12 (HIGH)", () => {
+    const mid = measureGlide(V0, 6);
+    const high = measureGlide(V0, 12);
+    expect(mid.distance).toBeGreaterThan(high.distance);
+    expect(mid.timeToRest).toBeGreaterThan(high.timeToRest);
+  });
+
+  it("glide distance is monotonically decreasing across full slider range 1..12", () => {
+    const frictions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    const distances = frictions.map(f => measureGlide(V0, f).distance);
+    for (let i = 1; i < distances.length; i++) {
+      expect(distances[i]).toBeLessThan(distances[i - 1]);
+    }
+  });
+
+  it("time-to-rest is monotonically decreasing across full slider range 1..12", () => {
+    const frictions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    const times = frictions.map(f => measureGlide(V0, f).timeToRest);
+    for (let i = 1; i < times.length; i++) {
+      expect(times[i]).toBeLessThan(times[i - 1]);
+    }
+  });
+
+  it("stepDecelIntegrate decelerates velocity (dt-scaled, frame-rate independent)", () => {
+    const state = { position: 0, velocity: 1000 };
+    const next = stepDecelIntegrate(state, 4, 0.016);
+    expect(next.velocity).toBeLessThan(1000);
+    expect(next.velocity).toBeGreaterThan(0);
+    expect(next.position).toBeGreaterThan(0);
+  });
+
+  it("stepDecelIntegrate at 2x dt ≈ 2 steps of 1x dt (frame-rate independence)", () => {
+    // If truly dt-scaled, one step of 2*dt ≈ two steps of dt
+    const state = { position: 0, velocity: 1000 };
+    const friction = 5;
+    const step1 = stepDecelIntegrate(stepDecelIntegrate(state, friction, 0.016), friction, 0.016);
+    const step2x = stepDecelIntegrate(state, friction, 0.032);
+    // Positions and velocities should be close (within 1px / 5 px/s)
+    expect(Math.abs(step1.position - step2x.position)).toBeLessThan(1);
+    expect(Math.abs(step1.velocity - step2x.velocity)).toBeLessThan(5);
   });
 });
 

@@ -222,64 +222,120 @@ export function Lesson02({ initialParams = {}, onParamsChange }: Props) {
 
   return (
     <div>
-      {/* DEMO STAGE */}
-      <div
-        ref={stageRef}
-        className="demo-canvas"
-        style={{ height: STAGE_H, marginBottom: "var(--sp-4)" }}
-        aria-label="Spring vs easing comparison stage"
-      >
-        {/* Divider */}
-        <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: "var(--grey-200)" }} />
-        <span style={{ position: "absolute", left: "25%", top: 8, transform: "translateX(-50%)", fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase" }}>SPRING</span>
-        <span style={{ position: "absolute", left: "75%", top: 8, transform: "translateX(-50%)", fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase" }}>EASING</span>
+      {/* Responsive styles */}
+      <style>{`
+        .l02-stages-row {
+          display: flex;
+          gap: var(--sp-4);
+          margin-bottom: var(--sp-4);
+        }
+        .l02-stage-col {
+          flex: 1;
+          min-width: 280px;
+          position: relative;
+          overflow: hidden;
+          border: 1px solid var(--grey-200);
+          background: var(--paper);
+          touch-action: none;
+          user-select: none;
+          -webkit-user-select: none;
+        }
+        @media (max-width: 639px) {
+          .l02-stages-row {
+            flex-direction: column;
+          }
+          .l02-stage-col {
+            min-width: 100%;
+            width: 100%;
+            flex: 0 0 auto;
+            height: 200px;
+          }
+        }
+        .l02-plots-row {
+          display: flex;
+          gap: var(--sp-4);
+          margin-bottom: var(--sp-6);
+        }
+        .l02-plot-col {
+          flex: 1;
+          min-width: 0;
+        }
+        @media (max-width: 639px) {
+          .l02-plots-row {
+            flex-direction: column;
+          }
+          .l02-plot-col {
+            min-width: 100%;
+            width: 100%;
+            flex: 0 0 auto;
+          }
+        }
+        .l02-params-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--sp-8);
+          min-width: 0;
+        }
+        @media (max-width: 639px) {
+          .l02-params-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
 
-        {/* Spring object */}
-        <div style={{
-          position: "absolute",
-          left: springPos,
-          top: STAGE_H / 2 - OBJECT_SIZE / 2,
-          width: OBJECT_SIZE,
-          height: OBJECT_SIZE,
-          background: "var(--ink)",
-          willChange: "transform",
-        }} />
-
-        {/* Easing object */}
-        <div style={{
-          position: "absolute",
-          left: "50%" ,
-          marginLeft: easingPos,
-          top: STAGE_H / 2 - OBJECT_SIZE / 2,
-          width: OBJECT_SIZE,
-          height: OBJECT_SIZE,
-          background: "var(--ink)",
-          willChange: "transform",
-        }} />
-
-        {/* Fire button */}
-        <button
-          className="ds-btn"
-          onClick={fire}
-          style={{
+      {/* DEMO STAGES — two separate panes, stack below 640px */}
+      <div className="l02-stages-row" ref={stageRef} aria-label="Spring vs easing comparison stages">
+        {/* Spring pane */}
+        <div className="l02-stage-col" style={{ height: STAGE_H }}>
+          <span style={{ position: "absolute", left: "50%", top: 8, transform: "translateX(-50%)", fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase" }}>SPRING</span>
+          <div style={{
             position: "absolute",
-            bottom: 12,
-            left: "50%",
-            transform: "translateX(-50%)",
-            padding: "6px 16px",
-            fontSize: "var(--fs-micro)",
-            letterSpacing: "var(--ls-micro)",
-          }}
-          disabled={running}
-          aria-label="Fire both animations"
-        >
-          {running ? "RUNNING" : "FIRE BOTH →"}
-        </button>
+            left: springPos,
+            top: STAGE_H / 2 - OBJECT_SIZE / 2,
+            width: OBJECT_SIZE,
+            height: OBJECT_SIZE,
+            background: "var(--ink)",
+            willChange: "left",
+          }} />
+          {/* Fire button — only in spring pane, centered across both at wide, per-pane at narrow */}
+          <button
+            className="ds-btn"
+            onClick={fire}
+            style={{
+              position: "absolute",
+              bottom: 12,
+              left: "50%",
+              transform: "translateX(-50%)",
+              padding: "6px 16px",
+              fontSize: "var(--fs-micro)",
+              letterSpacing: "var(--ls-micro)",
+              whiteSpace: "nowrap",
+            }}
+            disabled={running}
+            aria-label="Fire both animations"
+          >
+            {running ? "RUNNING" : "FIRE BOTH →"}
+          </button>
+        </div>
+
+        {/* Easing pane */}
+        <div className="l02-stage-col" style={{ height: STAGE_H }}>
+          <span style={{ position: "absolute", left: "50%", top: 8, transform: "translateX(-50%)", fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase" }}>EASING</span>
+          <div style={{
+            position: "absolute",
+            left: easingPos,
+            top: STAGE_H / 2 - OBJECT_SIZE / 2,
+            width: OBJECT_SIZE,
+            height: OBJECT_SIZE,
+            background: "var(--ink)",
+            willChange: "left",
+          }} />
+        </div>
       </div>
 
-      {/* Position-over-time plots */}
-      <div style={{ display: "flex", gap: "var(--sp-4)", marginBottom: "var(--sp-6)" }}>
-        <div style={{ flex: 1 }}>
+      {/* Position-over-time plots — stack below 640px */}
+      <div className="l02-plots-row">
+        <div className="l02-plot-col">
           <div style={{ fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 4 }}>SPRING POSITION</div>
           <svg width={plotW} height={plotH} style={{ border: "1px solid var(--grey-200)", display: "block", width: "100%", maxWidth: plotW }}>
             {!hasFired ? (
@@ -289,7 +345,7 @@ export function Lesson02({ initialParams = {}, onParamsChange }: Props) {
             )}
           </svg>
         </div>
-        <div style={{ flex: 1 }}>
+        <div className="l02-plot-col">
           <div style={{ fontSize: "var(--fs-micro)", color: "var(--grey-600)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 4 }}>EASING POSITION</div>
           <svg width={plotW} height={plotH} style={{ border: "1px solid var(--grey-200)", display: "block", width: "100%", maxWidth: plotW }}>
             {!hasFired ? (
@@ -303,7 +359,7 @@ export function Lesson02({ initialParams = {}, onParamsChange }: Props) {
 
       {/* CONTROLS */}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-6)", borderTop: "1px solid var(--grey-200)", paddingTop: "var(--sp-6)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-8)", minWidth: 0 }}>
+        <div className="l02-params-grid">
           {/* Spring params */}
           <div>
             <div style={{ fontSize: "var(--fs-label)", fontWeight: 500, letterSpacing: "var(--ls-label)", textTransform: "uppercase", color: "var(--grey-600)", marginBottom: "var(--sp-4)" }}>SPRING PARAMS</div>

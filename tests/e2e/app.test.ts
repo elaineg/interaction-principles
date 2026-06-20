@@ -376,28 +376,32 @@ test.describe("No auth/signup", () => {
   });
 });
 
-test.describe("Title card (item 1)", () => {
-  test("title card element exists above lesson content", async ({ page }) => {
+// Title card (item 1) — REMOVED 2026-06-20: hero band deleted, assertions inverted
+test.describe("Title card (item 1) — REMOVED — hero strings are ABSENT", () => {
+  test("NO title card element (data-testid='title-card') exists on page", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator('[data-testid="title-card"]')).toBeVisible();
+    await expect(page.locator('[data-testid="title-card"]')).toHaveCount(0);
   });
 
-  test("title card contains uppercase eyebrow INTERACTION DESIGN — 08 LESSONS", async ({ page }) => {
+  test("hero eyebrow 'INTERACTION DESIGN — 08 LESSONS' is NOT on the page", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText("INTERACTION DESIGN — 08 LESSONS")).toBeVisible();
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toContain("INTERACTION DESIGN — 08 LESSONS");
   });
 
-  test("title card contains lowercase display headline", async ({ page }) => {
+  test("hero headline 'feel how interfaces should move.' is NOT on the page", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText("feel how interfaces should move.")).toBeVisible();
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(/feel how interfaces should move/i);
   });
 
-  test("title card contains subtitle line", async ({ page }) => {
+  test("hero subtitle 'grab the controls. feel the physics' is NOT on the page", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText(/grab the controls/i)).toBeVisible();
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(/grab the controls\. feel the physics/i);
   });
 
-  test("L01 demo canvas still renders below the title card", async ({ page }) => {
+  test("L01 demo canvas renders (page goes straight from top bar to lesson)", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator('.demo-canvas').first()).toBeVisible();
   });

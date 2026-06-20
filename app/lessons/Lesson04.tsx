@@ -190,10 +190,24 @@ export function Lesson04({ initialParams = {}, onParamsChange }: Props) {
         />
       </div>
 
+      {/* Responsive styles */}
+      <style>{`
+        .l04-toggles-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: var(--sp-3);
+        }
+        @media (max-width: 639px) {
+          .l04-toggles-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+
       {/* CONTROLS */}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
         {/* Per-principle toggles */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "var(--sp-3)" }}>
+        <div className="l04-toggles-grid">
           {PRINCIPLES.map(p => (
             <label
               key={p.id}

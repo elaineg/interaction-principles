@@ -409,52 +409,7 @@ export default function AppShell() {
           }}
           id="main-content"
         >
-          {/* TITLE CARD — quiet tone-setting hero, full-width above lesson content */}
-          <div
-            data-testid="title-card"
-            style={{
-              borderBottom: "1px solid var(--grey-200)",
-              padding: "var(--sp-8) var(--sp-8) var(--sp-6)",
-              background: "var(--paper)",
-            }}
-          >
-            <span
-              style={{
-                display: "block",
-                fontSize: "var(--fs-micro)",
-                fontWeight: 500,
-                letterSpacing: "0.22em",
-                textTransform: "uppercase",
-                color: "var(--grey-600)",
-                marginBottom: "var(--sp-3)",
-              }}
-            >
-              INTERACTION DESIGN — 08 LESSONS
-            </span>
-            <h2
-              style={{
-                fontSize: "clamp(1.5rem, 2.5vw, var(--fs-display))",
-                fontWeight: 400,
-                lineHeight: 1.1,
-                letterSpacing: "-0.02em",
-                marginBottom: "var(--sp-2)",
-                color: "var(--ink)",
-              }}
-            >
-              feel how interfaces should move.
-            </h2>
-            <p
-              style={{
-                fontSize: "var(--fs-body)",
-                color: "var(--grey-600)",
-                margin: 0,
-              }}
-            >
-              grab the controls. feel the physics. free, no signup.
-            </p>
-          </div>
-
-          {/* Lesson content area */}
+            {/* Lesson content area */}
           <div style={{ padding: "var(--sp-8) var(--sp-8)" }}>
             {/* Eyebrow + copy actions row */}
             <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)", marginBottom: "var(--sp-4)", flexWrap: "wrap" }}>
@@ -592,10 +547,7 @@ export default function AppShell() {
           #main-content {
             padding: 0 !important;
           }
-          #main-content > div:first-child {
-            padding: var(--sp-6) var(--sp-4) var(--sp-4) !important;
-          }
-          #main-content > div:last-child {
+          #main-content > div {
             padding: var(--sp-4) var(--sp-4) !important;
           }
         }

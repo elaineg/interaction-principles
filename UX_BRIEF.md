@@ -1,4 +1,73 @@
-# UX Brief — Interaction Principles (ADD-FEATURE: batch of 8 fixes)
+## ADD-FEATURE 2026-06-20 (current run — supersedes conflicting items below)
+
+Four fixes ship together in ONE panel cycle. Chrome stays strict SSENSE
+(`lib/design-system/ssense.css`): monochrome ink/paper/grey, 1px hairlines, square corners,
+uppercase 11px tracked micro-labels, no shadows, generous whitespace. NO decorative color;
+`--red #B00020` ONLY on the bad/janky side of a comparison + dropped-frame markers (text/marks,
+never fills). Items 2 and 3 change physics/layout behavior; item 4 is a delight-correctness pass
+that behavior-green alone does NOT prove (see "Live visual passes" below). Do not regress any
+existing passing flow.
+
+**SINGLE SOURCE OF TRUTH — MOBILE STACK BREAKPOINT: stack below `sm` (640px).** Every two-up /
+side-by-side / paired demo and every multi-column control row switches from horizontal to a single
+vertical column at viewport width `< 640px` (Tailwind `sm:` prefix = "two-up at ≥640, stacked
+below"). One threshold, app-wide — do not invent per-lesson breakpoints. After stacking, each demo
+stage must remain LARGE enough to touch and interact with (min ~280px wide × ~200px tall usable
+canvas; controls ≥44px touch targets). Page gutters 16px mobile / 32–48px desktop; nothing clips
+or scrolls horizontally.
+
+**(1) REMOVE the title-card / hero band ENTIRELY.** Delete the band with eyebrow
+`INTERACTION DESIGN — 08 LESSONS`, headline "feel how interfaces should move.", subtitle "grab the
+controls. feel the physics. free, no signup." The page goes STRAIGHT from the top bar into the
+lesson layout — Lesson 01's eyebrow/headline becomes the first large type on the page. The wordmark
+`INTERACTION PRINCIPLES`, `08 LESSONS` count, and `REDUCED MOTION` toggle stay in the top bar (they
+are NOT the hero). Stale-test flag: any e2e/unit assertion that the hero eyebrow/headline/subtitle
+strings exist must be REMOVED or inverted (assert they are ABSENT) — an intended structure change
+leaves stale hero-asserting checks that will false-fail. Acceptance: no element renders the three
+hero strings; the first large (display) type on the page is Lesson 01's headline; the L01 demo
+sits higher (closer to the fold) than before.
+
+**(2) P0 CORRECTNESS — Lesson 05 friction slider must be FELT.** Today the `DECELERATION`/friction
+slider does nothing — the flicked card glides the same regardless of slider position. The slider
+value must actually feed the per-frame deceleration model and be read on EVERY decel step (no stale
+closure / no value captured once at mount), applied dt-scaled (frame-rate independent, not
+per-tick). UX framing: LOW friction = a long, far glide that coasts a long time; HIGH friction =
+the card stops quickly/abruptly. Make the slider's role legible — uppercase `DECELERATION` label
+with a tabular-nums readout and clear direction (label the ends so the user knows which way is more
+friction, e.g. a unit/scale or `LOW … HIGH`). Keep the existing in-bounds bounce (elastic velocity
+reflection, restitution < 1; the card NEVER escapes the stage). Acceptance: for one fixed lift-off
+velocity, dragging friction higher produces a visibly SHORTER total glide distance AND a shorter
+time-to-rest, monotonically across the slider range.
+
+**(3) Lesson 03 INTERRUPTIBLE catch zone — lengthen TRAVEL DISTANCE.** The interruptible panel's
+travel is too short to grab mid-flight. Make its sub-stage NOTICEABLY TALLER so the panel covers a
+longer vertical distance and is in motion long enough to actually catch/grab — on desktop AND
+touch. Increase the travel DISTANCE (taller sub-stage / longer open↔closed throw), do NOT just slow
+the animation down. The shared Open/Close trigger and the labeled INTERRUPTIBLE (ink) vs
+NON-INTERRUPTIBLE (`--red` "ignored") contrast stay. Acceptance: after firing, a user can press the
+moving INTERRUPTIBLE panel mid-flight and redirect it (hands off current position+velocity); the
+catch window is comfortable, not frame-perfect; the NON-INTERRUPTIBLE panel still ignores the grab.
+
+**(4) MOBILE AUDIT — every two-up demo STACKS and stays touch-usable at ≥320/375px.** Audit ALL
+lessons. EVERY side-by-side / two-up example MUST stack vertically below 640px (item rule above) —
+known cases: Lesson 02 (spring vs easing), Lesson 03 (interruptible vs non-interruptible), and any
+other paired demo or multi-column control row. After stacking, each demo stage stays full-width and
+genuinely TOUCH-INTERACTIVE — not merely rendered. Acceptance is NOT "renders + no horizontal
+scroll": the validator/verifier must perform a REAL touch interaction post-stack on each stacked
+demo at 375px AND 320px (drag the L01 square, flick the L05 card, grab the L03 panel, fire the L02
+A→B) and confirm it responds; controls remain reachable with ≥44px targets; nothing clips or
+overflows horizontally at either width.
+
+**Live visual passes (delight-correct ≠ behavior-green) — call out for validator:** because this is
+a delight-first app, automated green is necessary but not sufficient. Require LIVE human/visual
+confirmation of: (2) the felt difference between low and high friction (watch a flick at each
+extreme — glide length and stop are obviously different); (3) the panel is actually catchable
+mid-flight by hand at the new taller travel; (4) each stacked two-up demo is grab-able by touch at
+375px and 320px. These are the checks that catch "passes tests but feels wrong."
+
+---
+
+# UX Brief — Interaction Principles (PRIOR ADD-FEATURE: batch of 8 fixes — note item 1 below, the title card, is now REMOVED by the 2026-06-20 pass above)
 
 Refinement pass on the shipped 8-lesson curriculum. Chrome stays strict SSENSE
 (`lib/design-system/ssense.css`): monochrome ink/paper/grey, 1px hairlines, square corners,

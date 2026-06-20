@@ -9,10 +9,10 @@ import { stepSpring, makeSpringState, isAtRest, SpringState } from "../../lib/en
  * A shared trigger fires both simultaneously so the contrast is feelable.
  */
 
-const PANEL_H = 140;
-const STAGE_H = 220;
-const CLOSED_Y = STAGE_H - 40;
-const OPEN_Y = STAGE_H - PANEL_H;
+const PANEL_H = 120;
+const STAGE_H = 340;
+const CLOSED_Y = STAGE_H - 32;   // panel peeks 32px at the bottom
+const OPEN_Y = 40;               // panel fully open leaves 40px gap at top
 
 // ── shared spring params ──────────────────────────────────────────────────────
 const SPRING_PARAMS = { mass: 1, stiffness: 200, damping: 22 };
@@ -139,7 +139,7 @@ function Panel({
   onPointerUp: (e: React.PointerEvent) => void;
 }) {
   return (
-    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+    <div className="l03-panel-col" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
       {/* Label above stage */}
       <span
         style={{
@@ -221,15 +221,28 @@ export function Lesson03(_props?: { initialParams?: Record<string, unknown>; onP
 
   return (
     <div>
-      {/* DEMO STAGE — side by side */}
-      <div
-        style={{
-          display: "flex",
-          gap: "var(--sp-4)",
-          marginBottom: "var(--sp-4)",
-          flexWrap: "wrap",
-        }}
-      >
+      {/* Responsive styles — panels stack below 640px */}
+      <style>{`
+        .l03-panels-row {
+          display: flex;
+          gap: var(--sp-4);
+          margin-bottom: var(--sp-4);
+          flex-wrap: wrap;
+        }
+        .l03-panel-col {
+          flex: 1;
+          min-width: 280px;
+        }
+        @media (max-width: 639px) {
+          .l03-panel-col {
+            min-width: 100%;
+            width: 100%;
+          }
+        }
+      `}</style>
+
+      {/* DEMO STAGE — side by side, stacks below 640px */}
+      <div className="l03-panels-row">
         <Panel
           label="INTERRUPTIBLE"
           bad={false}

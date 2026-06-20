@@ -2,7 +2,8 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { addSample, estimateVelocity, PointerSample } from "../../lib/engine/velocity";
-import { stepDecel, isDecelDone, DecelState } from "../../lib/engine/decel";
+import { isDecelDone, DecelState } from "../../lib/engine/decel";
+import { stepDecelIntegrate } from "../../lib/engine/decelIntegrate";
 import type { ParamRecord } from "../../lib/lessonParams";
 
 /**
@@ -130,11 +131,12 @@ export function Lesson05({ initialParams = {}, onParamsChange }: Props) {
     function tick(now: number) {
       const dt = (now - lastTime) / 1000;
       lastTime = now;
+      // Read friction from ref EVERY frame — no stale closure; slider changes felt immediately
       const friction = frictionRef.current;
       const useRubber = rubberBandRef.current;
 
-      decelStateRef.current = stepDecel(decelStateRef.current, friction, dt);
-      decelStateYRef.current = stepDecel(decelStateYRef.current, friction, dt);
+      decelStateRef.current = stepDecelIntegrate(decelStateRef.current, friction, dt);
+      decelStateYRef.current = stepDecelIntegrate(decelStateYRef.current, friction, dt);
 
       let nx = decelStateRef.current.position;
       let ny = decelStateYRef.current.position;
@@ -350,9 +352,9 @@ export function Lesson05({ initialParams = {}, onParamsChange }: Props) {
             onChange={e => handleFrictionChange(Number(e.target.value))}
             aria-label="Deceleration friction coefficient"
           />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-micro)", color: "var(--grey-400)" }}>
-            <span>1 (long glide)</span>
-            <span>12 (quick stop)</span>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-micro)", color: "var(--grey-400)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <span>LOW — long coast</span>
+            <span>HIGH — quick stop</span>
           </div>
         </div>
 
